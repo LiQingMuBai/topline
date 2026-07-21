@@ -89,11 +89,11 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 		CreatedAt:   time.Now(),
 	}
 
-	agentName := s.cfg.AgentName
-	if agentName == "" {
-		agentName = os.Getenv("AGENT")
+	depositAddress, addressErr := s.resolveDepositAddress(context.Background())
+	if addressErr != nil {
+		logrus.WithError(addressErr).Warn("查询收款地址失败")
+		return
 	}
-	_, depositAddress, _ := repositories.NewSystemUserRepository(s.db).GetAddressesByUsername(context.Background(), agentName)
 	deposit.Address = depositAddress
 
 	if err := depositRepo.Create(context.Background(), &deposit); err != nil {
@@ -148,7 +148,7 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 		logrus.WithError(err).Warn("锁定占位金额失败")
 	}
 
-	_, depositAddress, err := repositories.NewSystemUserRepository(s.db).GetAddressesByUsername(context.Background(), s.cfg.AgentName)
+	depositAddress, err := s.resolveDepositAddress(context.Background())
 	if err != nil {
 		logrus.WithError(err).Warn("查询收款地址失败")
 		return
@@ -311,6 +311,28 @@ func (s *Service) notifyOrder(chatID int64, tips string) {
 	msg := tgbotapi.NewMessage(s.cfg.NotifyChatID, tips+"\n ID: "+strconv.FormatInt(chatID, 10)+"\n\n<b>状态：支付中</b>")
 	msg.ParseMode = "HTML"
 	s.send(msg)
+}
+
+func (s *Service) resolveDepositAddress(ctx context.Context) (string, error) {
+	agentName := ""
+	if s.cfg != nil {
+		agentName = s.cfg.AgentName
+	}
+	if agentName == "" {
+		agentName = os.Getenv("AGENT")
+	}
+	if agentName == "" {
+		return "", fmt.Errorf("缺少 AGENT 配置")
+	}
+
+	_, depositAddress, err := repositories.NewSystemUserRepository(s.db).GetAddressesByUsername(ctx, agentName)
+	if err != nil {
+		return "", err
+	}
+	if depositAddress == "" {
+		return "", fmt.Errorf("用户 %s 的收款地址为空", agentName)
+	}
+	return depositAddress, nil
 }
 
 func (s *Service) getPlanInfo(product, planID string) (string, string, error) {

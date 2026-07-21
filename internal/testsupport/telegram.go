@@ -145,6 +145,9 @@ func SeedTranslations() {
 		"language_option_en":           "English",
 		"language_switched":            "语言已切换成功。",
 		"support_message":              "📞{support}\n工作时间：{work_time}\n",
+		"purchase_topup":               "⚠️↓↓请按金额支付，否则无法到账↓↓\n---------------------------------\n🔸用户账号：@{username}\n🔸手机号码：<code>{mobile}</code> \n🔸支付金额：<code>{amount}</code> USDT\n🔸收款地址：<code>{address}</code>\n（点击地址复制）\n---------------------------------\n\n‼️请务必核对金额尾数，金额带小数\n",
+		"balance_pay_order":            "余额支付",
+		"cancel_order":                 "取消订单",
 	}
 	global.Translations["en"] = map[string]string{
 		"insufficient_balance_tips":    "Insufficient balance. Please top up first.",
