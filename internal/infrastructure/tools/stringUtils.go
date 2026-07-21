@@ -1,0 +1,379 @@
+package tools
+
+import (
+	"fmt"
+	"math/rand"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+)
+
+func ExtractNumber(s string) (int64, error) {
+	// 方法1: 使用字符串分割和TrimSpace
+	// 查找"笔"的位置
+	if idx := strings.Index(s, "笔"); idx != -1 {
+		// 提取"笔"之前的部分
+		numStr := strings.TrimSpace(s[:idx])
+		// 转换为int64
+		return strconv.ParseInt(numStr, 10, 64)
+	}
+	return 0, fmt.Errorf("未找到有效数字")
+}
+
+// GenerateTronOrderID 生成波场订单号（年月日时分 + 波场地址后4位）
+func GenerateOrderID(tronAddress string, suffix int) (string, error) {
+	// 1. 校验波场地址格式
+	tronAddress = strings.TrimSpace(tronAddress)
+	//if len(tronAddress) != 34 || !strings.HasPrefix(tronAddress, "T") {
+	//	return "", fmt.Errorf("无效的波场地址（必须34位且以T开头）")
+	//}
+
+	// 2. 获取当前时间的 "年月日时分"（格式：200601021504）
+	timestamp := time.Now().Format("20060102150405")
+
+	// 3. 截取波场地址后4位
+	addressSuffix := tronAddress[len(tronAddress)-suffix:]
+
+	// 4. 拼接时间 + 地址后4位
+	orderID := timestamp + addressSuffix
+	return orderID, nil
+}
+func TruncateString(s string) string {
+	// 转换为rune数组以正确处理多字节字符
+	runes := []rune(s)
+	totalRunes := len(runes)
+
+	// 字符数≤16时直接返回原字符串
+	if totalRunes <= 16 {
+		return s
+	}
+
+	// 取前8个字符 + "..." + 后8个字符
+	return string(runes[:4]) + "..." + string(runes[totalRunes-4:])
+}
+func RandomCookiesString(strings []string) string {
+	if len(strings) == 0 {
+		return ""
+	}
+	return strings[rand.Intn(len(strings))]
+}
+
+// 从字符串中提取"笔"前面的数值
+// 示例: ExtractNumberBeforeBi("10笔（12U）") 返回 10, nil
+// 如果找不到或转换失败，返回0和错误
+func ExtractNumberBeforeBi(s string) (int, error) {
+	// 找到"笔"的位置
+	biIndex := strings.Index(s, "笔")
+	if biIndex == -1 {
+		return 0, fmt.Errorf("未找到'笔'字")
+	}
+
+	// 提取"笔"前面的部分并去除空格
+	numStr := strings.TrimSpace(s[:biIndex])
+
+	// 转换为数字
+	num, err := strconv.Atoi(numStr)
+	if err != nil {
+		return 0, fmt.Errorf("转换数字失败: %v", err)
+	}
+
+	return num, nil
+}
+func CombineInt64AndString(str string, num int64) string {
+	// 将 int64 转为 string
+	numStr := strconv.FormatInt(num, 10) // 10 表示十进制
+	// 拼接字符串
+	return str + numStr
+}
+
+// IsEmpty 检查字符串是否为空
+func IsEmpty(s string) bool {
+	return len(strings.TrimSpace(s)) == 0
+}
+
+// IsNotEmpty 检查字符串是否非空
+func IsNotEmpty(s string) bool {
+	return !IsEmpty(s)
+}
+
+// Reverse 反转字符串
+func Reverse(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
+}
+
+// Substring 截取字符串
+func Substring(s string, start, end int) string {
+	runes := []rune(s)
+	if start < 0 {
+		start = 0
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+	if start > end {
+		return ""
+	}
+	return string(runes[start:end])
+}
+
+// ContainsAny 检查字符串是否包含任意一个给定的子串
+func ContainsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsAll 检查字符串是否包含所有给定的子串
+func ContainsAll(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
+}
+func ExtractLeadingInt64(s string) int64 {
+	re := regexp.MustCompile(`^\d+`) // 匹配开头的连续数字
+	match := re.FindString(s)
+	if match == "" {
+		return 0
+	}
+	num, _ := strconv.ParseInt(match, 10, 64)
+	return num
+}
+
+// EqualsIgnoreCase 忽略大小写比较字符串
+func EqualsIgnoreCase(s1, s2 string) bool {
+	return strings.EqualFold(s1, s2)
+}
+
+// RemoveAll 移除字符串中所有指定的子串
+func RemoveAll(s, remove string) string {
+	return strings.ReplaceAll(s, remove, "")
+}
+
+// RemoveAny 移除字符串中任意一个指定的子串
+func RemoveAny(s string, removes ...string) string {
+	for _, remove := range removes {
+		s = strings.ReplaceAll(s, remove, "")
+	}
+	return s
+}
+
+// IsNumeric 检查字符串是否只包含数字
+func IsNumeric(s string) bool {
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsAlpha 检查字符串是否只包含字母
+func IsAlpha(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsAlphaNumeric 检查字符串是否只包含字母和数字
+func IsAlphaNumeric(s string) bool {
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsBlank 检查字符串是否只包含空白字符
+func IsBlank(s string) bool {
+	return len(strings.TrimSpace(s)) == 0
+}
+
+// IsNotBlank 检查字符串是否包含非空白字符
+func IsNotBlank(s string) bool {
+	return !IsBlank(s)
+}
+
+// DefaultIfEmpty 如果字符串为空则返回默认值
+func DefaultIfEmpty(s, defaultValue string) string {
+	if IsEmpty(s) {
+		return defaultValue
+	}
+	return s
+}
+
+// Truncate 截断字符串并在末尾添加后缀（如果需要）
+func Truncate(s string, maxLength int, suffix string) string {
+	if maxLength <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLength {
+		return s
+	}
+	if len(runes) <= len(suffix) {
+		return string(runes[:maxLength])
+	}
+	return string(runes[:maxLength-len(suffix)]) + suffix
+}
+
+// Join 连接字符串切片
+func Join(elems []string, sep string) string {
+	return strings.Join(elems, sep)
+}
+
+// Split 分割字符串
+func Split(s, sep string) []string {
+	return strings.Split(s, sep)
+}
+
+// Capitalize 首字母大写
+func Capitalize(s string) string {
+	if IsEmpty(s) {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// Uncapitalize 首字母小写
+func Uncapitalize(s string) string {
+	if IsEmpty(s) {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// UpperCase 转换为大写
+func UpperCase(s string) string {
+	return strings.ToUpper(s)
+}
+
+// LowerCase 转换为小写
+func LowerCase(s string) string {
+	return strings.ToLower(s)
+}
+
+// CountMatches 统计子串出现的次数
+func CountMatches(s, sub string) int {
+	return strings.Count(s, sub)
+}
+
+// DeleteWhitespace 删除所有空白字符
+func DeleteWhitespace(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+//
+//// RandomString 生成随机字符串
+//func RandomString(length int) string {
+//	const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+//	result := make([]byte, length)
+//	for i := 0; i < length; i++ {
+//		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+//		result[i] = letters[num.Int64()]
+//	}
+//	return string(result)
+//}
+
+// IsEmail 检查字符串是否是有效的电子邮件地址
+func IsEmail(s string) bool {
+	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	return regexp.MustCompile(pattern).MatchString(s)
+}
+
+// IsURL 检查字符串是否是有效的URL
+func IsURL(s string) bool {
+	pattern := `^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$`
+	return regexp.MustCompile(pattern).MatchString(s)
+}
+
+// LeftPad 左侧填充字符串
+func LeftPad(s string, length int, padStr string) string {
+	if len(s) >= length {
+		return s
+	}
+	padding := strings.Repeat(padStr, length-len(s))
+	return padding + s
+}
+
+// RightPad 右侧填充字符串
+func RightPad(s string, length int, padStr string) string {
+	if len(s) >= length {
+		return s
+	}
+	padding := strings.Repeat(padStr, length-len(s))
+	return s + padding
+}
+
+// Strip 去除字符串两端的指定字符
+func Strip(s string, stripChars string) string {
+	return strings.Trim(s, stripChars)
+}
+
+// StripStart 去除字符串开头的指定字符
+func StripStart(s string, stripChars string) string {
+	return strings.TrimLeft(s, stripChars)
+}
+
+// StripEnd 去除字符串末尾的指定字符
+func StripEnd(s string, stripChars string) string {
+	return strings.TrimRight(s, stripChars)
+}
+
+// Abbreviate 缩写字符串
+func Abbreviate(s string, maxWidth int, abbrevMarker string) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxWidth {
+		return s
+	}
+	if maxWidth <= len(abbrevMarker) {
+		return string(runes[:maxWidth])
+	}
+	return string(runes[:maxWidth-len(abbrevMarker)]) + abbrevMarker
+}
+
+// SwapCase 交换字符串的大小写
+func SwapCase(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsUpper(r) {
+			return unicode.ToLower(r)
+		}
+		return unicode.ToUpper(r)
+	}, s)
+}
+
+// Wrap 用指定字符包裹字符串
+func Wrap(s string, wrapWith string) string {
+	return wrapWith + s + wrapWith
+}
+
+// Unwrap 去除包裹字符串的指定字符
+func Unwrap(s string, wrapWith string) string {
+	if strings.HasPrefix(s, wrapWith) && strings.HasSuffix(s, wrapWith) {
+		return s[len(wrapWith) : len(s)-len(wrapWith)]
+	}
+	return s
+}
