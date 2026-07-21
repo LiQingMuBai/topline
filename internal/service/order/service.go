@@ -92,6 +92,7 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 	depositAddress, addressErr := s.resolveDepositAddress(context.Background())
 	if addressErr != nil {
 		logrus.WithError(addressErr).Warn("查询收款地址失败")
+		s.notifyOrderIssue(callbackQuery.Message.Chat.ID, callbackQuery.From.UserName, "USDT充值", addressErr.Error())
 		return
 	}
 	deposit.Address = depositAddress
@@ -123,6 +124,7 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 		logrus.WithError(sendErr).Warn("发送 USDT 充值订单失败")
 		return
 	}
+	s.notifyOrder(callbackQuery.Message.Chat.ID, msg.Caption)
 
 	expiration := time.Minute
 	_ = s.cache.Set(strconv.FormatInt(callbackQuery.Message.Chat.ID, 10)+"_order_no", "USDT_"+deposit.OrderNO, expiration)
@@ -151,6 +153,7 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 	depositAddress, err := s.resolveDepositAddress(context.Background())
 	if err != nil {
 		logrus.WithError(err).Warn("查询收款地址失败")
+		s.notifyOrderIssue(chatID, username, productLabel(product), err.Error())
 		return
 	}
 
@@ -313,6 +316,27 @@ func (s *Service) notifyOrder(chatID int64, tips string) {
 	s.send(msg)
 }
 
+func (s *Service) notifyOrderIssue(chatID int64, username, scene, reason string) {
+	if s.cfg.NotifyChatID == 0 {
+		return
+	}
+
+	userDisplay := "@unknown"
+	if username != "" {
+		userDisplay = "@" + username
+	}
+	msg := tgbotapi.NewMessage(
+		s.cfg.NotifyChatID,
+		"⚠️<b>下单异常告警</b>\n"+
+			"场景："+scene+"\n"+
+			"用户ID："+strconv.FormatInt(chatID, 10)+"\n"+
+			"用户名："+userDisplay+"\n"+
+			"原因："+reason,
+	)
+	msg.ParseMode = "HTML"
+	s.send(msg)
+}
+
 func (s *Service) resolveDepositAddress(ctx context.Context) (string, error) {
 	agentName := ""
 	if s.cfg != nil {
@@ -367,4 +391,11 @@ func backCallback(product string) string {
 		return "back_home_data"
 	}
 	return "back_home"
+}
+
+func productLabel(product string) string {
+	if product == ProductData {
+		return "流量充值"
+	}
+	return "话费充值"
 }

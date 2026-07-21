@@ -134,6 +134,56 @@ func TestCreateTopupOrderFallsBackToAgentEnv(t *testing.T) {
 	require.Contains(t, requests[0].Form.Get("caption"), "点击地址复制")
 }
 
+func TestCreateTopupOrderNotifiesSupportWhenDepositAddressMissing(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	oldAgent, existed := os.LookupEnv("AGENT")
+	require.NoError(t, os.Setenv("AGENT", "masion"))
+	defer func() {
+		if existed {
+			_ = os.Setenv("AGENT", oldAgent)
+			return
+		}
+		_ = os.Unsetenv("AGENT")
+	}()
+
+	db, mock, cleanupDB := testsupport.NewMockGormDB(t)
+	defer cleanupDB()
+
+	bot, recorder, cleanupBot := testsupport.NewTestBot(t)
+	defer cleanupBot()
+
+	cacheStore := cache.NewMemoryCache()
+	require.NoError(t, cacheStore.Set("LANG_10004", "zh", 0))
+
+	mock.ExpectQuery("SELECT \\* FROM `polytopup_topup_plan` WHERE .*id =\\? .*LIMIT \\?").
+		WithArgs("1", 1).
+		WillReturnRows(testsupport.NewRows([]string{"id", "name_cn", "price"}).
+			AddRow(1, "10元话费", "10"))
+	mock.ExpectQuery("SELECT \\* FROM `user_usdt_placeholders` WHERE status = \\? ORDER BY RAND\\(\\)").
+		WithArgs(0).
+		WillReturnRows(testsupport.NewRows([]string{"id", "status", "placeholder"}).
+			AddRow(1, 0, "0.001"))
+	mock.ExpectExec("UPDATE `user_usdt_placeholders` SET `status`=\\? WHERE id = \\?").
+		WithArgs(1, 1).
+		WillReturnResult(testsupport.SQLResult(0, 1))
+	mock.ExpectQuery("SELECT address, deposit_address FROM `sys_users` WHERE username = \\? ORDER BY `sys_users`.`username` LIMIT \\?").
+		WithArgs("masion", 1).
+		WillReturnRows(testsupport.NewRows([]string{"address", "deposit_address"}).
+			AddRow("TMAIN", ""))
+
+	service := NewService(&config.Config{NotifyChatID: 99999}, db, bot, cacheStore)
+	service.CreateTopupOrder(10004, "alice", "+86123456789", "1", ProductTopup)
+
+	requests := recorder.Requests()
+	require.Len(t, requests, 1)
+	require.Equal(t, "sendMessage", requests[0].Method)
+	require.Equal(t, "99999", requests[0].Form.Get("chat_id"))
+	require.Contains(t, requests[0].Form.Get("text"), "下单异常告警")
+	require.Contains(t, requests[0].Form.Get("text"), "用户 masion 的收款地址为空")
+	require.Contains(t, requests[0].Form.Get("text"), "@alice")
+}
+
 func newCallbackQuery(chatID int64) *tgbotapi.CallbackQuery {
 	return &tgbotapi.CallbackQuery{
 		ID:   "callback-id",
