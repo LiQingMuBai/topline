@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"ushield_bot/internal/cache"
+	"ushield_bot/internal/global"
+	"ushield_bot/internal/i18n"
 	"ushield_bot/internal/infrastructure/repositories"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -15,15 +17,11 @@ const (
 	langCachePrefix = "LANG_"
 	langTTL         = 24 * time.Hour
 
-	menuTopup   = "⛽话费充值"
-	menuData    = "🔋流量充值"
-	menuProfile = "👤个人中心"
-	menuSupport = "🐍联系娘子"
-
 	callbackCancelOrder = "cancel_order"
 	callbackBackTopup   = "back_home"
 	callbackBackData    = "back_home_data"
 	callbackBackProfile = "back_profile"
+	callbackSetLang     = "set_lang:"
 )
 
 type userLanguageResolver struct {
@@ -50,7 +48,7 @@ func (r *userLanguageResolver) Resolve(chatID int64) string {
 		_ = r.cache.Set(r.langKey(chatID), record.Lang, langTTL)
 		return record.Lang
 	}
-	return "zh"
+	return global.DefaultLang
 }
 
 func (r *userLanguageResolver) langKey(chatID int64) string {
@@ -75,6 +73,15 @@ func splitPair(value string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+func matchesMenuText(text, key string) bool {
+	for _, lang := range global.SupportedLangs {
+		if text == i18n.T(lang, key) {
+			return true
+		}
+	}
+	return false
 }
 
 type MessageDispatcher interface {

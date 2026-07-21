@@ -14,6 +14,7 @@ import (
 
 type callbackDispatcher struct {
 	cache          cache.Cache
+	langResolver   *userLanguageResolver
 	profileService profileservice.Handler
 	topupService   topupservice.Handler
 	orderService   orderservice.Handler
@@ -21,12 +22,14 @@ type callbackDispatcher struct {
 
 func NewCallbackDispatcher(
 	cache cache.Cache,
+	langResolver *userLanguageResolver,
 	profileService profileservice.Handler,
 	topupService topupservice.Handler,
 	orderService orderservice.Handler,
 ) CallbackDispatcher {
 	return &callbackDispatcher{
 		cache:          cache,
+		langResolver:   langResolver,
 		profileService: profileService,
 		topupService:   topupService,
 		orderService:   orderService,
@@ -35,8 +38,11 @@ func NewCallbackDispatcher(
 
 func (d *callbackDispatcher) Handle(callbackQuery *tgbotapi.CallbackQuery) {
 	data := callbackQuery.Data
+	lang := d.langResolver.Resolve(callbackQuery.Message.Chat.ID)
 
 	switch {
+	case hasPrefix(data, callbackSetLang):
+		d.profileService.SwitchLanguage(callbackQuery.Message.Chat.ID, trimPrefix(data, callbackSetLang))
 	case hasPrefix(data, "nope_purchase_order"):
 		d.orderService.HandleBalancePayment(callbackQuery, trimPrefix(data, "nope_purchase_order"))
 	case data == callbackCancelOrder:
@@ -78,19 +84,19 @@ func (d *callbackDispatcher) Handle(callbackQuery *tgbotapi.CallbackQuery) {
 	case hasPrefix(data, topupservice.ActionDeleteMobile):
 		d.topupService.PromptMobileManagerInput(callbackQuery.Message.Chat.ID, trimPrefix(data, topupservice.ActionDeleteMobile), topupservice.ActionDeleteMobile)
 	case data == "deposit_amount":
-		d.profileService.ShowDepositAmountOptions("zh", callbackQuery)
+		d.profileService.ShowDepositAmountOptions(lang, callbackQuery)
 	case data == callbackBackProfile:
-		d.profileService.ShowHome("zh", callbackQuery.Message)
+		d.profileService.ShowHome(lang, callbackQuery.Message)
 	case hasPrefix(data, "deposit_usdt"):
-		d.orderService.ShowDepositUSDTOrder("zh", callbackQuery)
+		d.orderService.ShowDepositUSDTOrder(lang, callbackQuery)
 	case data == "click_deposit_usdt_records":
-		d.profileService.ShowDepositUSDTRecords("zh", callbackQuery)
+		d.profileService.ShowDepositUSDTRecords(lang, callbackQuery)
 	case data == "prev_deposit_usdt_page":
-		if _, done := d.profileService.ShowPrevDepositUSDTPage("zh", callbackQuery); done {
+		if _, done := d.profileService.ShowPrevDepositUSDTPage(lang, callbackQuery); done {
 			return
 		}
 	case data == "next_deposit_usdt_page":
-		if d.profileService.ShowNextDepositUSDTPage("zh", callbackQuery) {
+		if d.profileService.ShowNextDepositUSDTPage(lang, callbackQuery) {
 			return
 		}
 	default:

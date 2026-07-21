@@ -17,6 +17,7 @@ The project uses Telegram Bot API for interaction, GORM with MySQL for persisten
 - Support contact entry with working hours notice
 - USDT deposit order creation and balance payment flow
 - Environment-based configuration with a minimal `.env.example`
+- Multi-language loading through `translations/<lang>.json` files
 
 ## Project Structure
 
@@ -69,9 +70,31 @@ BOT_NAME=polytopup
 TG_DEBUG=false
 TOPUP_NOTIFY_CHAT_ID=0
 DEFAULT_LANG=zh
+SUPPORTED_LANGS=zh,en
 TRANSLATIONS_DIR=translations
 ORDER_IMAGE_PATH=./static/CCTV.png
 ```
+
+## Multi-Language Support
+
+The runtime can load more than one language pack.
+
+1. Add translation files under `translations/`, for example:
+
+```text
+translations/
+├── zh.json
+└── en.json
+```
+
+2. Configure the default language and the enabled language list:
+
+```env
+DEFAULT_LANG=zh
+SUPPORTED_LANGS=zh,en
+```
+
+3. Keep the default language file complete. Other language files can then be added incrementally.
 
 ## Run Locally
 
@@ -98,6 +121,7 @@ The current test suite includes focused unit tests for:
 
 ## Notes
 
-- The bot currently ships with Chinese translation data and defaults to `zh`.
+- The repository currently ships with Chinese translation data and defaults to `zh`.
+- Additional languages can be enabled by adding more translation JSON files and setting `SUPPORTED_LANGS`.
 - Runtime configuration is loaded from `.env`.
 - Do not commit real secrets such as Telegram tokens or production database credentials.

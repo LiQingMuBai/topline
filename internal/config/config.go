@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,7 +46,10 @@ func Load() (*Config, error) {
 		DefaultLang:    getEnvOrDefault("DEFAULT_LANG", defaultLang),
 		OrderImagePath: getEnvOrDefault("ORDER_IMAGE_PATH", "./static/CCTV.png"),
 	}
-	cfg.SupportedLangs = []string{cfg.DefaultLang}
+	cfg.SupportedLangs = getEnvLangList("SUPPORTED_LANGS", cfg.DefaultLang)
+	if !slices.Contains(cfg.SupportedLangs, cfg.DefaultLang) {
+		cfg.SupportedLangs = append([]string{cfg.DefaultLang}, cfg.SupportedLangs...)
+	}
 
 	if cfg.MySQLDSN == "" {
 		return nil, fmt.Errorf("缺少 MYSQL_DSN 配置")
@@ -91,4 +95,31 @@ func getEnvInt64(key string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
+}
+
+func getEnvLangList(key string, fallback string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return []string{fallback}
+	}
+
+	parts := strings.Split(value, ",")
+	langs := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		lang := strings.ToLower(strings.TrimSpace(part))
+		if lang == "" {
+			continue
+		}
+		if _, exists := seen[lang]; exists {
+			continue
+		}
+		seen[lang] = struct{}{}
+		langs = append(langs, lang)
+	}
+
+	if len(langs) == 0 {
+		return []string{fallback}
+	}
+	return langs
 }

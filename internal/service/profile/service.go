@@ -10,6 +10,7 @@ import (
 	"ushield_bot/internal/config"
 	"ushield_bot/internal/domain"
 	"ushield_bot/internal/global"
+	"ushield_bot/internal/i18n"
 	"ushield_bot/internal/infrastructure/repositories"
 	toolkit "ushield_bot/internal/infrastructure/tools"
 	"ushield_bot/internal/request"
@@ -26,6 +27,8 @@ type Handler interface {
 	HideKeyboard(message *tgbotapi.Message)
 	ShowHome(lang string, message *tgbotapi.Message)
 	ShowSupport(chatID int64)
+	ShowLanguageMenu(chatID int64)
+	SwitchLanguage(chatID int64, lang string)
 	ShowDepositAmountOptions(lang string, callbackQuery *tgbotapi.CallbackQuery)
 	ShowDepositUSDTRecords(lang string, callbackQuery *tgbotapi.CallbackQuery)
 	ShowPrevDepositUSDTPage(lang string, callbackQuery *tgbotapi.CallbackQuery) (*global.DepositState, bool)
@@ -60,7 +63,7 @@ func (s *Service) EnsureUser(message *tgbotapi.Message) error {
 		user := domain.User{
 			Associates: strconv.FormatInt(message.Chat.ID, 10),
 			Username:   message.Chat.UserName,
-			Lang:       "zh",
+			Lang:       s.defaultLang(),
 			CreatedAt:  time.Now(),
 			BotName:    s.cfg.BotName,
 		}
@@ -79,7 +82,7 @@ func (s *Service) EnsureUser(message *tgbotapi.Message) error {
 
 	lang := record.Lang
 	if lang == "" {
-		lang = "zh"
+		lang = s.defaultLang()
 	}
 	if err := s.cache.Set("LANG_"+strconv.FormatInt(message.Chat.ID, 10), lang, 24*time.Hour); err != nil {
 		logrus.WithError(err).Warn("写入语言缓存失败")
@@ -90,20 +93,27 @@ func (s *Service) EnsureUser(message *tgbotapi.Message) error {
 
 // ShowStartKeyboard 展示主菜单键盘。
 func (s *Service) ShowStartKeyboard(message *tgbotapi.Message) {
+	s.sendStartKeyboard(message.Chat.ID, s.resolveUserLang(message.Chat.ID))
+}
+
+func (s *Service) sendStartKeyboard(chatID int64, lang string) {
 	keyboard := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("⛽话费充值"),
-			tgbotapi.NewKeyboardButton("🔋流量充值"),
+			tgbotapi.NewKeyboardButton(i18n.T(lang, "menu_topup")),
+			tgbotapi.NewKeyboardButton(i18n.T(lang, "menu_data")),
 		),
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("👤个人中心"),
-			tgbotapi.NewKeyboardButton("🐍联系娘子"),
+			tgbotapi.NewKeyboardButton(i18n.T(lang, "menu_profile")),
+			tgbotapi.NewKeyboardButton(i18n.T(lang, "menu_support")),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton(i18n.T(lang, "menu_language")),
 		),
 	)
 	keyboard.OneTimeKeyboard = false
 	keyboard.ResizeKeyboard = true
 
-	msg := tgbotapi.NewMessage(message.Chat.ID, global.Translations["zh"]["welcome_tips"])
+	msg := tgbotapi.NewMessage(chatID, i18n.T(lang, "welcome_tips"))
 	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = keyboard
 	_, _ = s.bot.Send(msg)
@@ -111,7 +121,7 @@ func (s *Service) ShowStartKeyboard(message *tgbotapi.Message) {
 
 // HideKeyboard 隐藏主菜单键盘。
 func (s *Service) HideKeyboard(message *tgbotapi.Message) {
-	msg := tgbotapi.NewMessage(message.Chat.ID, "键盘已隐藏，发送 /start 重新显示")
+	msg := tgbotapi.NewMessage(message.Chat.ID, i18n.T(s.resolveUserLang(message.Chat.ID), "hide_keyboard_tips"))
 	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = s.bot.Send(msg)
 }
@@ -144,14 +154,50 @@ func (s *Service) ShowHome(lang string, message *tgbotapi.Message) {
 
 // ShowSupport 展示客服联系方式。
 func (s *Service) ShowSupport(chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "📞"+global.Translations["zh"]["support"]+"：@PolyTopUp\n工作时间：9:00-22:00\n")
+	lang := s.resolveUserLang(chatID)
+	msg := tgbotapi.NewMessage(chatID, i18n.TParam(lang, "support_message", map[string]string{
+		"support":   "@PolyTopUp",
+		"work_time": "9:00-22:00",
+	}))
 	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔙"+global.Translations["zh"]["back_home"], "back_profile"),
+			tgbotapi.NewInlineKeyboardButtonData("🔙"+i18n.T(lang, "back_home"), "back_profile"),
 		),
 	)
 	_, _ = s.bot.Send(msg)
+}
+
+// ShowLanguageMenu 展示语言切换菜单。
+func (s *Service) ShowLanguageMenu(chatID int64) {
+	lang := s.resolveUserLang(chatID)
+	msg := tgbotapi.NewMessage(chatID, i18n.T(lang, "language_menu_title"))
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, "language_option_zh"), "set_lang:zh"),
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, "language_option_en"), "set_lang:en"),
+		),
+	)
+	s.send(msg)
+}
+
+// SwitchLanguage 切换用户语言并刷新主菜单。
+func (s *Service) SwitchLanguage(chatID int64, lang string) {
+	if !s.isSupportedLang(lang) {
+		lang = s.defaultLang()
+	}
+
+	userRepo := repositories.NewUserRepository(s.db)
+	if err := userRepo.UpdateLang(lang, chatID); err != nil {
+		logrus.WithError(err).Warn("更新用户语言失败")
+		return
+	}
+	if err := s.cache.Set("LANG_"+strconv.FormatInt(chatID, 10), lang, 24*time.Hour); err != nil {
+		logrus.WithError(err).Warn("写入语言缓存失败")
+	}
+
+	s.send(tgbotapi.NewMessage(chatID, i18n.T(lang, "language_switched")))
+	s.sendStartKeyboard(chatID, lang)
 }
 
 // ShowDepositAmountOptions 展示充值金额选项。
@@ -308,4 +354,37 @@ func (s *Service) send(message tgbotapi.Chattable) {
 	if _, err := s.bot.Send(message); err != nil {
 		logrus.WithError(err).Warn("发送 Telegram 消息失败")
 	}
+}
+
+func (s *Service) resolveUserLang(chatID int64) string {
+	lang, err := s.cache.Get("LANG_" + strconv.FormatInt(chatID, 10))
+	if err == nil && lang != "" {
+		return lang
+	}
+
+	userRepo := repositories.NewUserRepository(s.db)
+	record, repoErr := userRepo.GetByChatID(chatID)
+	if repoErr == nil && record.Lang != "" {
+		return record.Lang
+	}
+	return s.defaultLang()
+}
+
+func (s *Service) defaultLang() string {
+	if s.cfg != nil && s.cfg.DefaultLang != "" {
+		return s.cfg.DefaultLang
+	}
+	if global.DefaultLang != "" {
+		return global.DefaultLang
+	}
+	return "zh"
+}
+
+func (s *Service) isSupportedLang(lang string) bool {
+	for _, item := range global.SupportedLangs {
+		if item == lang {
+			return true
+		}
+	}
+	return false
 }

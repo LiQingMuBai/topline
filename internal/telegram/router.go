@@ -26,7 +26,7 @@ func NewRouter(cfg *config.Config, db *gorm.DB, bot *tgbotapi.BotAPI, cache cach
 
 	return &Router{
 		messageDispatcher:  NewMessageDispatcher(cache, langResolver, profileSvc, topupSvc),
-		callbackDispatcher: NewCallbackDispatcher(cache, profileSvc, topupSvc, orderSvc),
+		callbackDispatcher: NewCallbackDispatcher(cache, langResolver, profileSvc, topupSvc, orderSvc),
 	}
 }
 

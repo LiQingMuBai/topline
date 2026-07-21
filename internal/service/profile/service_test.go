@@ -65,6 +65,32 @@ func TestShowPrevDepositUSDTPageRendersPreviousPage(t *testing.T) {
 	require.Contains(t, requests[0].Form.Get("text"), "25 USDT")
 }
 
+func TestSwitchLanguageRefreshesStartKeyboard(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	db, mock, cleanupDB := testsupport.NewMockGormDB(t)
+	defer cleanupDB()
+
+	bot, recorder, cleanupBot := testsupport.NewTestBot(t)
+	defer cleanupBot()
+
+	mock.ExpectExec("UPDATE tg_users SET lang = \\? WHERE associates = \\?").
+		WithArgs("en", int64(10003)).
+		WillReturnResult(testsupport.NewResult(0, 1))
+
+	service := NewService(&config.Config{DefaultLang: "zh"}, db, bot, cache.NewMemoryCache())
+	service.SwitchLanguage(10003, "en")
+
+	requests := recorder.Requests()
+	require.Len(t, requests, 2)
+	require.Equal(t, "sendMessage", requests[0].Method)
+	require.Contains(t, requests[0].Form.Get("text"), "Language switched successfully.")
+	require.Equal(t, "sendMessage", requests[1].Method)
+	require.Contains(t, requests[1].Form.Get("text"), "Welcome to the English menu")
+	require.Contains(t, requests[1].Form.Get("reply_markup"), "Top Up")
+	require.Contains(t, requests[1].Form.Get("reply_markup"), "Language")
+}
+
 func newProfileCallbackQuery(chatID int64) *tgbotapi.CallbackQuery {
 	return &tgbotapi.CallbackQuery{
 		ID:   "profile-callback",

@@ -59,14 +59,21 @@ func (d *messageDispatcher) handleCommand(message *tgbotapi.Message) {
 
 func (d *messageDispatcher) handleRegularMessage(message *tgbotapi.Message) {
 	switch message.Text {
-	case menuSupport:
+	case "":
+		return
+	}
+
+	switch {
+	case matchesMenuText(message.Text, "menu_support"):
 		d.profileService.ShowSupport(message.Chat.ID)
-	case menuData:
+	case matchesMenuText(message.Text, "menu_data"):
 		d.topupService.ShowCountryMenu(message.Chat.ID, orderservice.ProductData)
-	case menuTopup:
+	case matchesMenuText(message.Text, "menu_topup"):
 		d.topupService.ShowCountryMenu(message.Chat.ID, orderservice.ProductTopup)
-	case menuProfile:
+	case matchesMenuText(message.Text, "menu_profile"):
 		d.profileService.ShowHome(d.langResolver.Resolve(message.Chat.ID), message)
+	case matchesMenuText(message.Text, "menu_language"):
+		d.profileService.ShowLanguageMenu(message.Chat.ID)
 	default:
 		d.handlePendingMessage(message)
 	}

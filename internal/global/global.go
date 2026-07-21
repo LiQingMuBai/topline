@@ -17,7 +17,7 @@ var (
 	Translations = make(map[string]map[string]string) // 存储所有翻译
 
 	TranslationsDir = "translations"  // 翻译文件目录
-	SupportedLangs  = []string{"zh"} // 第二轮极限裁剪后仅保留中文文案
-	DefaultLang     = "zh"           // 默认语言
+	SupportedLangs  = []string{"zh"}  // 当前已加载的语言列表
+	DefaultLang     = "zh"            // 默认语言
 	Mutex           = &sync.RWMutex{} // 读写锁
 )

@@ -42,3 +42,8 @@ func NewRows(columns []string) *sqlmock.Rows {
 func SQLResult(lastInsertID int64, rowsAffected int64) sql.Result {
 	return sqlmock.NewResult(lastInsertID, rowsAffected)
 }
+
+// NewResult 兼容测试里更直观的命名。
+func NewResult(lastInsertID int64, rowsAffected int64) sql.Result {
+	return SQLResult(lastInsertID, rowsAffected)
+}

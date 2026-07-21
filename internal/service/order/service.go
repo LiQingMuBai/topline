@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"ushield_bot/internal/cache"
 	"ushield_bot/internal/config"
 	"ushield_bot/internal/domain"
 	"ushield_bot/internal/global"
+	"ushield_bot/internal/i18n"
 	"ushield_bot/internal/infrastructure/repositories"
 	toolkit "ushield_bot/internal/infrastructure/tools"
 	polyrepo "ushield_bot/internal/poly/repo"
@@ -131,6 +131,7 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 
 // CreateTopupOrder 创建话费或流量充值订单。
 func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, product string) {
+	lang := s.resolveUserLang(chatID)
 	planName, price, err := s.getPlanInfo(product, planID)
 	if err != nil {
 		logrus.WithError(err).Warn("查询套餐详情失败")
@@ -172,11 +173,12 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 	}
 
 	displayAmount := toolkit.AddStringsAsFloats(price, placeholder.Placeholder)
-	tips := global.Translations["zh"]["purchase_topup"]
-	tips = strings.ReplaceAll(tips, "{username}", username)
-	tips = strings.ReplaceAll(tips, "{mobile}", displayMobile(product, mobile, planName))
-	tips = strings.ReplaceAll(tips, "{amount}", displayAmount)
-	tips = strings.ReplaceAll(tips, "{address}", depositAddress)
+	tips := i18n.TParam(lang, "purchase_topup", map[string]string{
+		"username": username,
+		"mobile":   displayMobile(product, mobile, planName),
+		"amount":   displayAmount,
+		"address":  depositAddress,
+	})
 
 	s.notifyOrder(chatID, tips)
 
@@ -185,8 +187,8 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 	photo.ParseMode = "HTML"
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⏳"+global.Translations["zh"]["balance_pay_order"], "nope_purchase_order"+orderNo),
-			tgbotapi.NewInlineKeyboardButtonData(global.Translations["zh"]["cancel_order"], backCallback(product)),
+			tgbotapi.NewInlineKeyboardButtonData("⏳"+i18n.T(lang, "balance_pay_order"), "nope_purchase_order"+orderNo),
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, "cancel_order"), backCallback(product)),
 		),
 	)
 
@@ -201,6 +203,7 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 
 // HandleBalancePayment 处理余额支付。
 func (s *Service) HandleBalancePayment(callbackQuery *tgbotapi.CallbackQuery, orderNo string) {
+	lang := s.resolveUserLang(callbackQuery.Message.Chat.ID)
 	depositRepo := repositories.NewUserUSDTDepositRepository(s.db)
 	record, err := depositRepo.GetByOrderNo(context.Background(), orderNo)
 	if err != nil {
@@ -220,15 +223,15 @@ func (s *Service) HandleBalancePayment(callbackQuery *tgbotapi.CallbackQuery, or
 
 	if flag, _ := toolkit.CompareNumberStrings(user.Amount, record.Amount); flag < 0 {
 		msg := tgbotapi.NewMessage(callbackQuery.Message.Chat.ID,
-			"<b>"+"🔍"+global.Translations["zh"]["insufficient_balance_tips"]+"</b>"+"\n"+
-				"🆔"+global.Translations["zh"]["user_id"]+": <code>"+user.Associates+"</code>\n"+
-				"👤"+global.Translations["zh"]["username"]+": @"+user.Username+"\n"+
-				"💰"+global.Translations["zh"]["balance"]+"\n"+
+			"<b>"+"🔍"+i18n.T(lang, "insufficient_balance_tips")+"</b>"+"\n"+
+				"🆔"+i18n.T(lang, "user_id")+": <code>"+user.Associates+"</code>\n"+
+				"👤"+i18n.T(lang, "username")+": @"+user.Username+"\n"+
+				"💰"+i18n.T(lang, "balance")+"\n"+
 				"-  USDT："+user.Amount)
 		msg.ParseMode = "HTML"
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("💵"+global.Translations["zh"]["deposit"], "deposit_amount"),
+				tgbotapi.NewInlineKeyboardButtonData("💵"+i18n.T(lang, "deposit"), "deposit_amount"),
 			),
 		)
 		s.send(msg)
@@ -250,8 +253,8 @@ func (s *Service) HandleBalancePayment(callbackQuery *tgbotapi.CallbackQuery, or
 		logrus.WithError(err).Warn("更新订单状态失败")
 	}
 
-	tips := strings.ReplaceAll(global.Translations["zh"]["successfully_purchased_order"], "{amount}", record.Amount)
-	msg := tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, global.Translations["zh"]["order_id"]+"：TOPUP-"+orderNo+"\n"+tips)
+	tips := i18n.TParam(lang, "successfully_purchased_order", map[string]string{"amount": record.Amount})
+	msg := tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, i18n.T(lang, "order_id")+"：TOPUP-"+orderNo+"\n"+tips)
 	msg.ParseMode = "HTML"
 	s.send(msg)
 }
@@ -281,6 +284,23 @@ func (s *Service) send(message tgbotapi.Chattable) {
 	if _, err := s.bot.Send(message); err != nil {
 		logrus.WithError(err).Warn("发送 Telegram 消息失败")
 	}
+}
+
+func (s *Service) resolveUserLang(chatID int64) string {
+	lang, err := s.cache.Get("LANG_" + strconv.FormatInt(chatID, 10))
+	if err == nil && lang != "" {
+		return lang
+	}
+
+	userRepo := repositories.NewUserRepository(s.db)
+	record, repoErr := userRepo.GetByChatID(chatID)
+	if repoErr == nil && record.Lang != "" {
+		return record.Lang
+	}
+	if global.DefaultLang != "" {
+		return global.DefaultLang
+	}
+	return "zh"
 }
 
 func (s *Service) notifyOrder(chatID int64, tips string) {

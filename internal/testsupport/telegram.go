@@ -117,6 +117,8 @@ func NewTestBot(t *testing.T) (*tgbotapi.BotAPI, *TelegramRecorder, func()) {
 
 // SeedTranslations 写入测试需要的最小中文翻译集。
 func SeedTranslations() {
+	global.DefaultLang = "zh"
+	global.SupportedLangs = []string{"zh", "en"}
 	global.Translations["zh"] = map[string]string{
 		"insufficient_balance_tips":    "余额不足，请先充值",
 		"user_id":                      "用户ID",
@@ -131,6 +133,45 @@ func SeedTranslations() {
 		"back_home":                    "返回个人中心",
 		"back_homepage":                "返回首页",
 		"support":                      "客服",
+		"menu_topup":                   "⛽话费充值",
+		"menu_data":                    "🔋流量充值",
+		"menu_profile":                 "👤个人中心",
+		"menu_support":                 "🐍联系娘子",
+		"menu_language":                "🌐切换语言",
+		"welcome_tips":                 "欢迎使用中文菜单",
+		"hide_keyboard_tips":           "键盘已隐藏，发送 /start 重新显示",
+		"language_menu_title":          "请选择语言 / Please choose a language",
+		"language_option_zh":           "中文",
+		"language_option_en":           "English",
+		"language_switched":            "语言已切换成功。",
+		"support_message":              "📞{support}\n工作时间：{work_time}\n",
+	}
+	global.Translations["en"] = map[string]string{
+		"insufficient_balance_tips":    "Insufficient balance. Please top up first.",
+		"user_id":                      "User ID",
+		"username":                     "Username",
+		"balance":                      "Balance",
+		"deposit":                      "Deposit",
+		"order_id":                     "Order ID",
+		"successfully_purchased_order": "Successfully purchased {amount} USDT worth of top-up or data.",
+		"deposit_records":              "Deposit Records",
+		"prev":                         "Previous",
+		"next":                         "Next",
+		"back_home":                    "Back to Profile",
+		"back_homepage":                "Back to Home",
+		"support":                      "Support",
+		"menu_topup":                   "⛽ Top Up",
+		"menu_data":                    "🔋 Data Top Up",
+		"menu_profile":                 "👤 Profile",
+		"menu_support":                 "🐍 Support",
+		"menu_language":                "🌐 Language",
+		"welcome_tips":                 "Welcome to the English menu",
+		"hide_keyboard_tips":           "Keyboard hidden. Send /start to show it again.",
+		"language_menu_title":          "Please choose a language",
+		"language_option_zh":           "中文",
+		"language_option_en":           "English",
+		"language_switched":            "Language switched successfully.",
+		"support_message":              "📞{support}\nWorking hours: {work_time}\n",
 	}
 }
 

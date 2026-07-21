@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"ushield_bot/internal/global"
 )
 
 type memoryCache struct {
@@ -30,7 +31,7 @@ func (m *memoryCache) Get(key string) (string, error) {
 	}
 
 	if strings.Contains(key, "LANG_") {
-		return "zh", nil
+		return global.DefaultLang, nil
 	}
 	return "", nil
 }
