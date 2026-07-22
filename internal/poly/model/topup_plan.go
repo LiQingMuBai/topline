@@ -1,7 +1,7 @@
 package model
 
 type CarrierTopupPlan struct {
-	ALI_MODEL
+	BaseModel
 	NameEn    string `json:"name_en" gorm:"column:name_en;size:255" form:"name_en"`
 	NameCn    string `json:"name_cn" gorm:"column:name_cn;size:255" form:"name_cn"`
 	EventName string `json:"event_name" gorm:"column:event_name;size:255" form:"event_name"`
@@ -16,7 +16,7 @@ func (CarrierTopupPlan) TableName() string {
 }
 
 type ExpensesTopupPlan struct {
-	ALI_MODEL
+	BaseModel
 	NameEn    string `json:"name_en" gorm:"column:name_en;size:255" form:"name_en"`
 	NameCn    string `json:"name_cn" gorm:"column:name_cn;size:255" form:"name_cn"`
 	EventName string `json:"event_name" gorm:"column:event_name;size:255" form:"event_name"`
@@ -31,7 +31,7 @@ func (ExpensesTopupPlan) TableName() string {
 }
 
 type DataTopupPlan struct {
-	ALI_MODEL
+	BaseModel
 	NameEn    string `json:"name_en" gorm:"column:name_en;size:255" form:"name_en"`
 	NameCn    string `json:"name_cn" gorm:"column:name_cn;size:255" form:"name_cn"`
 	EventName string `json:"event_name" gorm:"column:event_name;size:255" form:"event_name"`
@@ -46,7 +46,7 @@ func (DataTopupPlan) TableName() string {
 }
 
 type UserMobile struct {
-	ALI_MODEL
+	BaseModel
 	Mobile      string `json:"mobile" gorm:"column:mobile;size:255" form:"mobile"`
 	ReminderDay string `json:"reminder_day" gorm:"column:reminder_day;size:255" form:"reminder_day"`
 	Status      int    `json:"status" gorm:"column:status" form:"status"`

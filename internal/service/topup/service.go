@@ -229,7 +229,7 @@ func (s *Service) HandleAddMobileInput(chatID int64, input, countryID string) {
 
 	countryNumericID, _ := strconv.Atoi(countryID)
 	pkg := model.UserMobile{
-		ALI_MODEL: model.ALI_MODEL{
+		BaseModel: model.BaseModel{
 			CreatedAt: time.Now(),
 		},
 		CountryID:   countryNumericID,
