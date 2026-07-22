@@ -23,6 +23,7 @@ type Config struct {
 	AgentName       string
 	SupportUsername string
 	SupportWorkTime string
+	TopupFeeRate    string
 	NotifyChatID    int64
 	BotDebug        bool
 	TranslationDir  string
@@ -44,6 +45,7 @@ func Load() (*Config, error) {
 		AgentName:       strings.TrimSpace(os.Getenv("AGENT")),
 		SupportUsername: strings.TrimSpace(os.Getenv("SUPPORT_USERNAME")),
 		SupportWorkTime: strings.TrimSpace(os.Getenv("SUPPORT_WORK_TIME")),
+		TopupFeeRate:    getEnvOrDefault("TOPUP_FEE_RATE", "5%-10%"),
 		BotDebug:        getEnvBool("TG_DEBUG", false),
 		NotifyChatID:    getEnvInt64("TOPUP_NOTIFY_CHAT_ID", 0),
 		TranslationDir:  getEnvOrDefault("TRANSLATIONS_DIR", defaultTranslationDir),

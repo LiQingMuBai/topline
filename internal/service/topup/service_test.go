@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"ushield_bot/internal/cache"
 	"ushield_bot/internal/config"
+	orderservice "ushield_bot/internal/service/order"
 	"ushield_bot/internal/testsupport"
 )
 
@@ -123,4 +124,13 @@ func TestShowCountryMenuUsesConfiguredWorkTime(t *testing.T) {
 	require.Len(t, requests, 1)
 	require.Equal(t, "sendMessage", requests[0].Method)
 	require.Contains(t, requests[0].Form.Get("text"), "10:00-20:00")
+}
+
+func TestPlanPromptUsesConfiguredFeeRate(t *testing.T) {
+	service := NewService(&config.Config{TopupFeeRate: "6%-9%"}, nil, nil, nil, nil)
+
+	text := service.planPrompt(orderservice.ProductTopup)
+
+	require.Contains(t, text, "6%-9%")
+	require.NotContains(t, text, "5%-10%")
 }

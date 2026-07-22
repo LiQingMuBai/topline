@@ -143,7 +143,7 @@ func (s *Service) ShowPlanMenu(chatID int64, countryID, product string) {
 	}
 
 	keyboard := append(buildInlineKeyboardRows(planButtons, 2), tgbotapi.NewInlineKeyboardRow(extraButtons...))
-	msg := tgbotapi.NewMessage(chatID, planPrompt(product))
+	msg := tgbotapi.NewMessage(chatID, s.planPrompt(product))
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(keyboard...)
 	msg.ParseMode = "HTML"
 	s.send(msg)
@@ -461,11 +461,17 @@ func (s *Service) countryPrompt(product string) string {
 	return "请选择充值话费国家" + workTimeLine
 }
 
-func planPrompt(product string) string {
+func (s *Service) planPrompt(product string) string {
 	if product == orderservice.ProductData {
 		return "请选择5G流量套餐:"
 	}
-	return "请选择充值金额\n✅ 按实时汇率自动结算\n✅ 充值成功后，将收取 5% 服务佣金（仅在到账金额中扣除）"
+	feeRate := "5%-10%"
+	if s != nil && s.cfg != nil {
+		if configuredFeeRate := strings.TrimSpace(s.cfg.TopupFeeRate); configuredFeeRate != "" {
+			feeRate = configuredFeeRate
+		}
+	}
+	return "请选择充值金额\n✅ 按实时汇率自动结算\n✅ 充值成功后，将收取 " + feeRate + " 服务佣金（仅在到账金额中扣除）"
 }
 
 func mobileSavedPrompt(product string, country model.Country) string {
