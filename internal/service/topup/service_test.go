@@ -33,13 +33,14 @@ func TestShowPlanMobilePromptWithoutSavedMobileSetsInputState(t *testing.T) {
 
 	state, err := memCache.Get("10001")
 	require.NoError(t, err)
-	require.Equal(t, StateTopupMobilePrefix+"P100", state)
+	require.Equal(t, StateTopupMobilePrefix+"86=P100", state)
 
 	requests := recorder.Requests()
 	require.Len(t, requests, 1)
 	require.Equal(t, "sendMessage", requests[0].Method)
 	require.Contains(t, requests[0].Form.Get("text"), "请输入您要充值的")
 	require.Contains(t, requests[0].Form.Get("text"), "中国")
+	require.Contains(t, requests[0].Form.Get("text"), "移动 +86138123456789")
 }
 
 func TestHandleReminderDayInputUpdatesReminderAndRendersManager(t *testing.T) {
@@ -77,4 +78,26 @@ func TestHandleReminderDayInputUpdatesReminderAndRendersManager(t *testing.T) {
 	require.Equal(t, "sendMessage", requests[1].Method)
 	require.Contains(t, requests[1].Form.Get("text"), "中国")
 	require.Contains(t, requests[1].Form.Get("text"), "提醒18号")
+}
+
+func TestHandleAddMobileInputRejectsEntryWithoutCarrierName(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	bot, recorder, cleanupBot := testsupport.NewTestBot(t)
+	defer cleanupBot()
+
+	service := NewService(nil, bot, cache.NewMemoryCache(), nil)
+	service.HandleAddMobileInput(10003, "+86138123456789", "86")
+
+	requests := recorder.Requests()
+	require.Len(t, requests, 1)
+	require.Equal(t, "sendMessage", requests[0].Method)
+	require.Contains(t, requests[0].Form.Get("text"), "运营商 + 手机号码")
+	require.Contains(t, requests[0].Form.Get("text"), "移动 +86138123456789")
+}
+
+func TestValidMobileEntryAcceptsEntryWithoutSpace(t *testing.T) {
+	require.True(t, validMobileEntry("移动 +86138123456789"))
+	require.True(t, validMobileEntry("移动+86138123456789"))
+	require.False(t, validMobileEntry("+86138123456789"))
 }

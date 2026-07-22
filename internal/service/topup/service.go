@@ -33,7 +33,7 @@ type Handler interface {
 	ShowCountryMenu(chatID int64, product string)
 	ShowPlanMenu(chatID int64, countryID, product string)
 	ShowPlanMobilePrompt(chatID int64, countryID, planID, product string)
-	HandleMobileInput(chatID int64, username, input, planID, product string)
+	HandleMobileInput(chatID int64, username, input, countryID, planID, product string)
 	PromptMobileManagerInput(chatID int64, countryID, action string)
 	HandleAddMobileInput(chatID int64, input, countryID string)
 	HandleDeleteMobileInput(chatID int64, input, countryID string)
@@ -159,33 +159,33 @@ func (s *Service) ShowPlanMobilePrompt(chatID int64, countryID, planID, product 
 		msg := tgbotapi.NewMessage(chatID, mobileInputPrompt(product, country))
 		msg.ParseMode = "HTML"
 		s.send(msg)
-		_ = s.cache.Set(s.stateKey(chatID), inputStatePrefix(product)+planID, time.Minute)
+		_ = s.cache.Set(s.stateKey(chatID), inputStatePrefix(product)+buildSelectionPayload(countryID, planID), time.Minute)
 		return
 	}
 
 	buttons := make([]tgbotapi.InlineKeyboardButton, 0, len(items))
 	for _, item := range items {
-		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(item.Mobile, mobileSelectPrefix(product)+item.Mobile+"="+planID))
+		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(item.Mobile, mobileSelectPrefix(product)+item.Mobile+"="+buildSelectionPayload(countryID, planID)))
 	}
 
 	msg := tgbotapi.NewMessage(chatID, mobileSavedPrompt(product, country))
 	msg.ReplyMarkup = buildInlineKeyboard(buttons, 1)
 	msg.ParseMode = "HTML"
 	s.send(msg)
-	_ = s.cache.Set(s.stateKey(chatID), inputStatePrefix(product)+planID, time.Minute)
+	_ = s.cache.Set(s.stateKey(chatID), inputStatePrefix(product)+buildSelectionPayload(countryID, planID), time.Minute)
 }
 
 // HandleMobileInput 处理号码输入并创建订单。
-func (s *Service) HandleMobileInput(chatID int64, username, input, planID, product string) {
+func (s *Service) HandleMobileInput(chatID int64, username, input, countryID, planID, product string) {
 	mobile := strings.TrimSpace(input)
-	if !validMobile(mobile) {
-		msg := tgbotapi.NewMessage(chatID, "当前手机号码有误，无法添加\n")
+	if !validMobileEntry(mobile) {
+		msg := tgbotapi.NewMessage(chatID, invalidMobilePrompt())
 		msg.ParseMode = "HTML"
 		s.send(msg)
 		return
 	}
 
-	s.orderService.CreateTopupOrder(chatID, username, mobile, planID, product)
+	s.orderService.CreateTopupOrder(chatID, username, mobile, countryID, planID, product)
 }
 
 // PromptMobileManagerInput 提示用户输入待新增或待删除号码。
@@ -211,8 +211,8 @@ func (s *Service) PromptMobileManagerInput(chatID int64, countryID, action strin
 // HandleAddMobileInput 处理新增号码。
 func (s *Service) HandleAddMobileInput(chatID int64, input, countryID string) {
 	mobile := strings.TrimSpace(input)
-	if !validMobile(mobile) {
-		msg := tgbotapi.NewMessage(chatID, "当前手机号码有误，无法添加\n")
+	if !validMobileEntry(mobile) {
+		msg := tgbotapi.NewMessage(chatID, invalidMobilePrompt())
 		msg.ParseMode = "HTML"
 		s.send(msg)
 		return
@@ -365,9 +365,45 @@ func buildInlineKeyboardRows(buttons []tgbotapi.InlineKeyboardButton, perRow int
 	return rows
 }
 
-func validMobile(mobile string) bool {
-	length := len(mobile)
-	return length >= 5 && length <= 30
+func validMobileEntry(mobile string) bool {
+	entry := strings.TrimSpace(mobile)
+	if entry == "" {
+		return false
+	}
+
+	parts := strings.Fields(entry)
+	operator := ""
+	number := ""
+	switch {
+	case len(parts) >= 2:
+		operator = strings.Join(parts[:len(parts)-1], " ")
+		number = parts[len(parts)-1]
+	case strings.Contains(entry, "+"):
+		plusIndex := strings.LastIndex(entry, "+")
+		if plusIndex <= 0 {
+			return false
+		}
+		operator = strings.TrimSpace(entry[:plusIndex])
+		number = strings.TrimSpace(entry[plusIndex:])
+	default:
+		return false
+	}
+
+	if len(operator) == 0 || len(operator) > 20 {
+		return false
+	}
+	if len(number) < 5 || len(number) > 20 {
+		return false
+	}
+	if !strings.HasPrefix(number, "+") {
+		return false
+	}
+	for _, ch := range number[1:] {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func countryCallbackPrefix(product string) string {
@@ -398,6 +434,10 @@ func inputStatePrefix(product string) string {
 	return StateTopupMobilePrefix
 }
 
+func buildSelectionPayload(countryID, planID string) string {
+	return countryID + "=" + planID
+}
+
 func backCallback(product string) string {
 	if product == orderservice.ProductData {
 		return "back_home_data"
@@ -421,14 +461,18 @@ func planPrompt(product string) string {
 
 func mobileSavedPrompt(product string, country model.Country) string {
 	if product == orderservice.ProductData {
-		return "请点击下方号码充值，或重新输入您要充值的<b>" + country.NameCn + "</b>" + country.NameEn + "，手机号码: "
+		return "请点击下方号码充值，或重新输入您要充值的<b>" + country.NameCn + "</b>" + country.NameEn + "，运营商 + 手机号码（示例：移动 +86138123456789）: "
 	}
-	return "请点击下方号码充值，或重新输入您要充值的<b>" + country.NameCn + "</b>手机号码: "
+	return "请点击下方号码充值，或重新输入您要充值的<b>" + country.NameCn + "</b>运营商 + 手机号码（示例：移动 +86138123456789）: "
 }
 
 func mobileInputPrompt(product string, country model.Country) string {
 	if product == orderservice.ProductData {
-		return "请输入您要充值的<b>" + country.NameCn + "</b>" + country.NameEn + "，手机号码（+国家区号）: "
+		return "请输入您要充值的<b>" + country.NameCn + "</b>" + country.NameEn + "，运营商 + 手机号码（示例：移动 +86138123456789）: "
 	}
-	return "请输入您要充值的<b>" + country.NameCn + "</b>手机号码（+国家区号）: "
+	return "请输入您要充值的<b>" + country.NameCn + "</b>运营商 + 手机号码（示例：移动 +86138123456789）: "
+}
+
+func invalidMobilePrompt() string {
+	return "当前号码格式有误，请按“运营商 + 手机号码”或“运营商+手机号码”格式输入\n示例：移动 +86138123456789 或 移动+86138123456789\n"
 }

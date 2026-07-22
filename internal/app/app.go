@@ -5,6 +5,7 @@ import (
 
 	"ushield_bot/internal/cache"
 	"ushield_bot/internal/config"
+	"ushield_bot/internal/domain"
 	"ushield_bot/internal/i18n"
 	"ushield_bot/internal/telegram"
 
@@ -39,6 +40,9 @@ func New() (*App, error) {
 	db, err := gorm.Open(mysql.Open(cfg.MySQLDSN), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("连接 MySQL 失败: %w", err)
+	}
+	if err := db.AutoMigrate(&domain.UserUSDTDeposits{}); err != nil {
+		return nil, fmt.Errorf("同步订单表结构失败: %w", err)
 	}
 
 	bot, err := tgbotapi.NewBotAPI(cfg.BotToken)

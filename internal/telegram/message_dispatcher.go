@@ -85,9 +85,15 @@ func (d *messageDispatcher) handlePendingMessage(message *tgbotapi.Message) {
 	case hasPrefix(status, topupservice.StateSetReminderPrefix):
 		d.topupService.HandleReminderDayInput(message.Chat.ID, message.Text, trimPrefix(status, topupservice.StateSetReminderPrefix))
 	case hasPrefix(status, topupservice.StateTopupMobilePrefix):
-		d.topupService.HandleMobileInput(message.Chat.ID, message.Chat.UserName, message.Text, trimPrefix(status, topupservice.StateTopupMobilePrefix), orderservice.ProductTopup)
+		countryID, planID, ok := splitPair(trimPrefix(status, topupservice.StateTopupMobilePrefix))
+		if ok {
+			d.topupService.HandleMobileInput(message.Chat.ID, message.Chat.UserName, message.Text, countryID, planID, orderservice.ProductTopup)
+		}
 	case hasPrefix(status, topupservice.StateDataMobilePrefix):
-		d.topupService.HandleMobileInput(message.Chat.ID, message.Chat.UserName, message.Text, trimPrefix(status, topupservice.StateDataMobilePrefix), orderservice.ProductData)
+		countryID, planID, ok := splitPair(trimPrefix(status, topupservice.StateDataMobilePrefix))
+		if ok {
+			d.topupService.HandleMobileInput(message.Chat.ID, message.Chat.UserName, message.Text, countryID, planID, orderservice.ProductData)
+		}
 	case hasPrefix(status, topupservice.ActionAddMobile):
 		d.topupService.HandleAddMobileInput(message.Chat.ID, strings.TrimSpace(message.Text), trimPrefix(status, topupservice.ActionAddMobile))
 	case hasPrefix(status, topupservice.ActionDeleteMobile):

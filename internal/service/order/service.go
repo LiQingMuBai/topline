@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"ushield_bot/internal/cache"
@@ -31,7 +32,7 @@ const (
 // Handler 抽象订单相关能力，便于替换实现和做单测。
 type Handler interface {
 	ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.CallbackQuery)
-	CreateTopupOrder(chatID int64, username, mobile, planID, product string)
+	CreateTopupOrder(chatID int64, username, mobile, countryID, planID, product string)
 	HandleBalancePayment(callbackQuery *tgbotapi.CallbackQuery, orderNo string)
 	DeleteCachedOrderMessage(chatID int64)
 }
@@ -92,7 +93,7 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 	depositAddress, addressErr := s.resolveDepositAddress(context.Background())
 	if addressErr != nil {
 		logrus.WithError(addressErr).Warn("查询收款地址失败")
-		s.notifyOrderIssue(callbackQuery.Message.Chat.ID, callbackQuery.From.UserName, "USDT充值", addressErr.Error())
+		s.notifyOrderIssue(callbackQuery.Message.Chat.ID, callbackQuery.From.UserName, "USDT充值", addressErr.Error(), "", "")
 		return
 	}
 	deposit.Address = depositAddress
@@ -124,7 +125,7 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 		logrus.WithError(sendErr).Warn("发送 USDT 充值订单失败")
 		return
 	}
-	s.notifyOrder(callbackQuery.Message.Chat.ID, msg.Caption)
+	s.notifyOrder(callbackQuery.Message.Chat.ID, msg.Caption, "", "")
 
 	expiration := time.Minute
 	_ = s.cache.Set(strconv.FormatInt(callbackQuery.Message.Chat.ID, 10)+"_order_no", "USDT_"+deposit.OrderNO, expiration)
@@ -132,11 +133,24 @@ func (s *Service) ShowDepositUSDTOrder(lang string, callbackQuery *tgbotapi.Call
 }
 
 // CreateTopupOrder 创建话费或流量充值订单。
-func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, product string) {
+func (s *Service) CreateTopupOrder(chatID int64, username, mobile, selectedCountryID, planID, product string) {
 	lang := s.resolveUserLang(chatID)
-	planName, price, err := s.getPlanInfo(product, planID)
+	planName, price, bundleID, planCountryID, countryName, err := s.getPlanInfo(product, planID)
 	if err != nil {
 		logrus.WithError(err).Warn("查询套餐详情失败")
+		return
+	}
+	orderCountryID, orderCountryName, err := s.resolveOrderCountry(product, selectedCountryID, planCountryID, countryName)
+	if err != nil {
+		logrus.WithError(err).WithFields(logrus.Fields{
+			"chat_id":             chatID,
+			"plan_id":             planID,
+			"bundle_id":           bundleID,
+			"selected_country_id": selectedCountryID,
+			"plan_country_id":     planCountryID,
+			"product":             product,
+		}).Warn("校验下单国家失败")
+		s.notifyOrderIssue(chatID, username, productLabel(product), err.Error(), s.supportCountryName(selectedCountryID, ""), mobile)
 		return
 	}
 
@@ -153,7 +167,7 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 	depositAddress, err := s.resolveDepositAddress(context.Background())
 	if err != nil {
 		logrus.WithError(err).Warn("查询收款地址失败")
-		s.notifyOrderIssue(chatID, username, productLabel(product), err.Error())
+		s.notifyOrderIssue(chatID, username, productLabel(product), err.Error(), orderCountryName, mobile)
 		return
 	}
 
@@ -164,10 +178,13 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 		Status:      0,
 		Placeholder: placeholder.Placeholder,
 		Address:     depositAddress,
+		CountryID:   orderCountryID,
+		CountryName: orderCountryName,
 		Amount:      price,
 		CreatedAt:   time.Now(),
 		Block:       mobile,
 		Source:      orderSource(product),
+		BundleId:    bundleID,
 	}
 
 	if err := repositories.NewUserUSDTDepositRepository(s.db).Create(context.Background(), &deposit); err != nil {
@@ -183,7 +200,7 @@ func (s *Service) CreateTopupOrder(chatID int64, username, mobile, planID, produ
 		"address":  depositAddress,
 	})
 
-	s.notifyOrder(chatID, tips)
+	s.notifyOrder(chatID, tips, orderCountryName, mobile)
 
 	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(s.cfg.OrderImagePath))
 	photo.Caption = tips
@@ -260,6 +277,7 @@ func (s *Service) HandleBalancePayment(callbackQuery *tgbotapi.CallbackQuery, or
 	msg := tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, i18n.T(lang, "order_id")+"：TOPUP-"+orderNo+"\n"+tips)
 	msg.ParseMode = "HTML"
 	s.send(msg)
+	s.notifyBalancePaymentSuccess(callbackQuery.Message.Chat.ID, user.Username, orderNo, record)
 }
 
 // DeleteCachedOrderMessage 删除缓存中的历史订单消息。
@@ -306,17 +324,23 @@ func (s *Service) resolveUserLang(chatID int64) string {
 	return "zh"
 }
 
-func (s *Service) notifyOrder(chatID int64, tips string) {
+func (s *Service) notifyOrder(chatID int64, tips, countryName, mobile string) {
 	if s.cfg.NotifyChatID == 0 {
 		return
 	}
 
-	msg := tgbotapi.NewMessage(s.cfg.NotifyChatID, tips+"\n ID: "+strconv.FormatInt(chatID, 10)+"\n\n<b>状态：支付中</b>")
+	msg := tgbotapi.NewMessage(
+		s.cfg.NotifyChatID,
+		tips+"\n ID: "+strconv.FormatInt(chatID, 10)+
+			"\n国家："+supportValue(countryName, "未知国家")+
+			"\n号码："+supportValue(mobile, "未知号码")+
+			"\n\n<b>状态：支付中</b>",
+	)
 	msg.ParseMode = "HTML"
 	s.send(msg)
 }
 
-func (s *Service) notifyOrderIssue(chatID int64, username, scene, reason string) {
+func (s *Service) notifyOrderIssue(chatID int64, username, scene, reason, countryName, mobile string) {
 	if s.cfg.NotifyChatID == 0 {
 		return
 	}
@@ -331,10 +355,57 @@ func (s *Service) notifyOrderIssue(chatID int64, username, scene, reason string)
 			"场景："+scene+"\n"+
 			"用户ID："+strconv.FormatInt(chatID, 10)+"\n"+
 			"用户名："+userDisplay+"\n"+
+			"国家："+supportValue(countryName, "未知国家")+"\n"+
+			"号码："+supportValue(mobile, "未知号码")+"\n"+
 			"原因："+reason,
 	)
 	msg.ParseMode = "HTML"
 	s.send(msg)
+}
+
+func (s *Service) notifyBalancePaymentSuccess(chatID int64, username, orderNo string, record domain.UserUSDTDeposits) {
+	if s.cfg.NotifyChatID == 0 {
+		return
+	}
+
+	userDisplay := "@unknown"
+	if username != "" {
+		userDisplay = "@" + username
+	}
+	countryName := record.CountryName
+	mobile := record.Block
+	msg := tgbotapi.NewMessage(
+		s.cfg.NotifyChatID,
+		"✅<b>余额支付成功</b>\n"+
+			"订单号：TOPUP-"+orderNo+"\n"+
+			"用户ID："+strconv.FormatInt(chatID, 10)+"\n"+
+			"用户名："+userDisplay+"\n"+
+			"国家："+supportValue(countryName, "未知国家")+"\n"+
+			"号码："+supportValue(mobile, "未知号码")+"\n"+
+			"金额："+record.Amount+" USDT",
+	)
+	msg.ParseMode = "HTML"
+	s.send(msg)
+}
+
+func (s *Service) supportCountryName(countryID, fallback string) string {
+	if fallback != "" {
+		return fallback
+	}
+	countryName, err := s.resolveCountryName(countryID)
+	if err != nil {
+		logrus.WithError(err).WithField("country_id", countryID).Warn("查询客服通知国家名称失败")
+		return ""
+	}
+	return countryName
+}
+
+func supportValue(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func (s *Service) resolveDepositAddress(ctx context.Context) (string, error) {
@@ -359,17 +430,97 @@ func (s *Service) resolveDepositAddress(ctx context.Context) (string, error) {
 	return depositAddress, nil
 }
 
-func (s *Service) getPlanInfo(product, planID string) (string, string, error) {
+func (s *Service) getPlanInfo(product, planID string) (string, string, int64, int64, string, error) {
 	switch product {
 	case ProductTopup:
 		item, err := polyrepo.NewExpensesTopUpPlanRepo(s.db).Get(context.Background(), planID)
-		return item.NameCn, item.Price, err
+		if err != nil {
+			return "", "", 0, 0, "", err
+		}
+		countryName, countryErr := s.resolveCountryName(strconv.Itoa(item.CountryID))
+		if countryErr != nil {
+			logrus.WithError(countryErr).WithFields(logrus.Fields{
+				"product":    product,
+				"plan_id":    planID,
+				"country_id": item.CountryID,
+			}).Warn("查询国家名称失败，按空值继续下单")
+		}
+		return item.NameCn, item.Price, int64(item.ID), int64(item.CountryID), countryName, nil
 	case ProductData:
 		item, err := polyrepo.NewDataTopUpPlanRepo(s.db).Get(context.Background(), planID)
-		return item.NameCn, item.Price, err
+		if err != nil {
+			return "", "", 0, 0, "", err
+		}
+		countryName, countryErr := s.resolveCountryName(strconv.Itoa(item.CountryID))
+		if countryErr != nil {
+			logrus.WithError(countryErr).WithFields(logrus.Fields{
+				"product":    product,
+				"plan_id":    planID,
+				"country_id": item.CountryID,
+			}).Warn("查询国家名称失败，按空值继续下单")
+		}
+		return item.NameCn, item.Price, int64(item.ID), int64(item.CountryID), countryName, nil
 	default:
-		return "", "", fmt.Errorf("未知充值类型: %s", product)
+		return "", "", 0, 0, "", fmt.Errorf("未知充值类型: %s", product)
 	}
+}
+
+func (s *Service) resolveCountryName(countryID string) (string, error) {
+	if countryID == "" || countryID == "0" {
+		return "", nil
+	}
+	country, err := polyrepo.NewCountryRepo(s.db).Get(context.Background(), countryID)
+	if err != nil {
+		return "", err
+	}
+	if country.NameCn != "" {
+		return country.NameCn, nil
+	}
+	if country.NameEn != "" {
+		return country.NameEn, nil
+	}
+	return "", nil
+}
+
+func (s *Service) resolveOrderCountry(product, selectedCountryID string, planCountryID int64, planCountryName string) (int64, string, error) {
+	selectedCountryID = strings.TrimSpace(selectedCountryID)
+	if selectedCountryID == "" {
+		return 0, "", fmt.Errorf("传入 countryID 为空")
+	}
+
+	selectedID, err := strconv.ParseInt(selectedCountryID, 10, 64)
+	if err != nil || selectedID <= 0 {
+		return 0, "", fmt.Errorf("传入 countryID 非法: %s", selectedCountryID)
+	}
+	if product == ProductData {
+		countryName, resolveErr := s.resolveCountryName(strconv.FormatInt(selectedID, 10))
+		if resolveErr != nil {
+			logrus.WithError(resolveErr).WithFields(logrus.Fields{
+				"selected_country_id": selectedID,
+				"product":             product,
+			}).Warn("按原始点击路径查询流量国家名称失败")
+			return selectedID, "", nil
+		}
+		return selectedID, countryName, nil
+	}
+	if planCountryID <= 0 {
+		countryName := planCountryName
+		if countryName == "" {
+			resolvedName, resolveErr := s.resolveCountryName(strconv.FormatInt(selectedID, 10))
+			if resolveErr != nil {
+				logrus.WithError(resolveErr).WithFields(logrus.Fields{
+					"selected_country_id": selectedID,
+				}).Warn("套餐 country_id 缺失，回退选中国家时查询名称失败")
+			} else {
+				countryName = resolvedName
+			}
+		}
+		return selectedID, countryName, nil
+	}
+	if selectedID != planCountryID {
+		return 0, "", fmt.Errorf("countryID 不一致: 传入=%d, 套餐=%d", selectedID, planCountryID)
+	}
+	return planCountryID, planCountryName, nil
 }
 
 func displayMobile(product, mobile, planName string) string {

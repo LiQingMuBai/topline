@@ -62,14 +62,20 @@ func (d *callbackDispatcher) Handle(callbackQuery *tgbotapi.CallbackQuery) {
 			d.topupService.ShowPlanMobilePrompt(callbackQuery.Message.Chat.ID, countryID, planID, orderservice.ProductData)
 		}
 	case hasPrefix(data, "click_mobile_topup"):
-		mobile, planID, ok := splitPair(trimPrefix(data, "click_mobile_topup"))
+		mobile, selection, ok := splitPair(trimPrefix(data, "click_mobile_topup"))
 		if ok {
-			d.orderService.CreateTopupOrder(callbackQuery.Message.Chat.ID, callbackQuery.Message.Chat.UserName, mobile, planID, orderservice.ProductTopup)
+			countryID, planID, selectionOK := splitPair(selection)
+			if selectionOK {
+				d.orderService.CreateTopupOrder(callbackQuery.Message.Chat.ID, callbackQuery.Message.Chat.UserName, mobile, countryID, planID, orderservice.ProductTopup)
+			}
 		}
 	case hasPrefix(data, "click_mobile_data_topup"):
-		mobile, planID, ok := splitPair(trimPrefix(data, "click_mobile_data_topup"))
+		mobile, selection, ok := splitPair(trimPrefix(data, "click_mobile_data_topup"))
 		if ok {
-			d.orderService.CreateTopupOrder(callbackQuery.Message.Chat.ID, callbackQuery.Message.Chat.UserName, mobile, planID, orderservice.ProductData)
+			countryID, planID, selectionOK := splitPair(selection)
+			if selectionOK {
+				d.orderService.CreateTopupOrder(callbackQuery.Message.Chat.ID, callbackQuery.Message.Chat.UserName, mobile, countryID, planID, orderservice.ProductData)
+			}
 		}
 	case data == callbackBackTopup:
 		d.orderService.DeleteCachedOrderMessage(callbackQuery.Message.Chat.ID)
