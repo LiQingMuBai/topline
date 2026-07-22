@@ -6,6 +6,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 	"ushield_bot/internal/cache"
+	"ushield_bot/internal/config"
 	"ushield_bot/internal/testsupport"
 )
 
@@ -28,7 +29,7 @@ func TestShowPlanMobilePromptWithoutSavedMobileSetsInputState(t *testing.T) {
 		WithArgs("86", "10001").
 		WillReturnRows(testsupport.NewRows([]string{"id", "mobile", "reminder_day"}))
 
-	service := NewService(db, bot, memCache, nil)
+	service := NewService(&config.Config{}, db, bot, memCache, nil)
 	service.ShowPlanMobilePrompt(10001, "86", "P100", "topup")
 
 	state, err := memCache.Get("10001")
@@ -68,7 +69,7 @@ func TestHandleReminderDayInputUpdatesReminderAndRendersManager(t *testing.T) {
 		WillReturnRows(testsupport.NewRows([]string{"id", "mobile", "reminder_day"}).
 			AddRow(9, "+8613800000000", "18"))
 
-	service := NewService(db, bot, cache.NewMemoryCache(), nil)
+	service := NewService(&config.Config{}, db, bot, cache.NewMemoryCache(), nil)
 	service.HandleReminderDayInput(10002, "18", "9")
 
 	requests := recorder.Requests()
@@ -86,7 +87,7 @@ func TestHandleAddMobileInputRejectsEntryWithoutCarrierName(t *testing.T) {
 	bot, recorder, cleanupBot := testsupport.NewTestBot(t)
 	defer cleanupBot()
 
-	service := NewService(nil, bot, cache.NewMemoryCache(), nil)
+	service := NewService(&config.Config{}, nil, bot, cache.NewMemoryCache(), nil)
 	service.HandleAddMobileInput(10003, "+86138123456789", "86")
 
 	requests := recorder.Requests()
@@ -100,4 +101,26 @@ func TestValidMobileEntryAcceptsEntryWithoutSpace(t *testing.T) {
 	require.True(t, validMobileEntry("移动 +86138123456789"))
 	require.True(t, validMobileEntry("移动+86138123456789"))
 	require.False(t, validMobileEntry("+86138123456789"))
+}
+
+func TestShowCountryMenuUsesConfiguredWorkTime(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	db, mock, cleanupDB := testsupport.NewMockGormDB(t)
+	defer cleanupDB()
+
+	bot, recorder, cleanupBot := testsupport.NewTestBot(t)
+	defer cleanupBot()
+
+	mock.ExpectQuery("SELECT \\* FROM `polytopup_country` WHERE `polytopup_country`.`deleted_at` IS NULL").
+		WillReturnRows(testsupport.NewRows([]string{"id", "name_cn"}).
+			AddRow(86, "中国"))
+
+	service := NewService(&config.Config{SupportWorkTime: "10:00-20:00"}, db, bot, cache.NewMemoryCache(), nil)
+	service.ShowCountryMenu(10004, "topup")
+
+	requests := recorder.Requests()
+	require.Len(t, requests, 1)
+	require.Equal(t, "sendMessage", requests[0].Method)
+	require.Contains(t, requests[0].Form.Get("text"), "10:00-20:00")
 }

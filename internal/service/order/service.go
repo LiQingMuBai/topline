@@ -273,7 +273,10 @@ func (s *Service) HandleBalancePayment(callbackQuery *tgbotapi.CallbackQuery, or
 		logrus.WithError(err).Warn("更新订单状态失败")
 	}
 
-	tips := i18n.TParam(lang, "successfully_purchased_order", map[string]string{"amount": record.Amount})
+	tips := i18n.TParam(lang, "successfully_purchased_order", map[string]string{
+		"amount":  record.Amount,
+		"support": s.supportUsername(lang),
+	})
 	msg := tgbotapi.NewMessage(callbackQuery.Message.Chat.ID, i18n.T(lang, "order_id")+"：TOPUP-"+orderNo+"\n"+tips)
 	msg.ParseMode = "HTML"
 	s.send(msg)
@@ -549,4 +552,11 @@ func productLabel(product string) string {
 		return "流量充值"
 	}
 	return "话费充值"
+}
+
+func (s *Service) supportUsername(lang string) string {
+	if s.cfg != nil && strings.TrimSpace(s.cfg.SupportUsername) != "" {
+		return strings.TrimSpace(s.cfg.SupportUsername)
+	}
+	return i18n.T(lang, "support")
 }

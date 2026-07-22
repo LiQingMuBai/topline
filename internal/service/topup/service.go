@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ushield_bot/internal/cache"
+	"ushield_bot/internal/config"
 	"ushield_bot/internal/global"
 	"ushield_bot/internal/poly/model"
 	polyrepo "ushield_bot/internal/poly/repo"
@@ -42,6 +43,7 @@ type Handler interface {
 
 // Service 负责话费与流量充值链路。
 type Service struct {
+	cfg          *config.Config
 	db           *gorm.DB
 	bot          *tgbotapi.BotAPI
 	cache        cache.Cache
@@ -49,8 +51,9 @@ type Service struct {
 }
 
 // NewService 创建充值服务。
-func NewService(db *gorm.DB, bot *tgbotapi.BotAPI, cache cache.Cache, orderService *orderservice.Service) *Service {
+func NewService(cfg *config.Config, db *gorm.DB, bot *tgbotapi.BotAPI, cache cache.Cache, orderService *orderservice.Service) *Service {
 	return &Service{
+		cfg:          cfg,
 		db:           db,
 		bot:          bot,
 		cache:        cache,
@@ -120,7 +123,7 @@ func (s *Service) ShowCountryMenu(chatID int64, product string) {
 		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(countryItem.NameCn, countryCallbackPrefix(product)+strconv.FormatUint(uint64(countryItem.ID), 10)))
 	}
 
-	msg := tgbotapi.NewMessage(chatID, countryPrompt(product))
+	msg := tgbotapi.NewMessage(chatID, s.countryPrompt(product))
 	msg.ReplyMarkup = buildInlineKeyboard(buttons, 4)
 	msg.ParseMode = "HTML"
 	s.send(msg)
@@ -445,11 +448,17 @@ func backCallback(product string) string {
 	return "back_home"
 }
 
-func countryPrompt(product string) string {
-	if product == orderservice.ProductData {
-		return "请选择充值流量国家\n工作时间：9:00-22:00\n📌1、流量无法标准化，各个国家流量期限不一致。\n📌2、遇问题请第一时间联系客服。\n📌3、具体规则以客服解释执行为准。"
+func (s *Service) countryPrompt(product string) string {
+	workTimeLine := ""
+	if s != nil && s.cfg != nil {
+		if workTime := strings.TrimSpace(s.cfg.SupportWorkTime); workTime != "" {
+			workTimeLine = "\n工作时间：" + workTime
+		}
 	}
-	return "请选择充值话费国家\n工作时间：9:00-22:00"
+	if product == orderservice.ProductData {
+		return "请选择充值流量国家" + workTimeLine + "\n📌1、流量无法标准化，各个国家流量期限不一致。\n📌2、遇问题请第一时间联系客服。\n📌3、具体规则以客服解释执行为准。"
+	}
+	return "请选择充值话费国家" + workTimeLine
 }
 
 func planPrompt(product string) string {

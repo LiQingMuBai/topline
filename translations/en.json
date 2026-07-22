@@ -31,7 +31,7 @@
   "promotion_link": "Referral Link",
   "purchase_topup": "⚠️↓↓ Please pay the exact amount below, otherwise it cannot be credited ↓↓\n---------------------------------\n🔸User: @{username}\n🔸Mobile Number: <code>{mobile}</code> \n🔸Amount: <code>{amount}</code> USDT\n🔸Receiving Address: <code>{address}</code>\n(tap address to copy)\n---------------------------------\n\n‼️ Please double-check the decimal suffix in the payment amount.\n",
   "receive_address": "Receiving Address:",
-  "successfully_purchased_order": "✅ Successfully purchased {amount} USDT worth of top-up or data. Please wait patiently while we process the recharge. If you have any questions, contact support @PolyTopUp",
+  "successfully_purchased_order": "✅ Successfully purchased {amount} USDT worth of top-up or data. Please wait patiently while we process the recharge. If you have any questions, contact support {support}",
   "support": "Support",
   "support_message": "📞{support}\nWorking hours: {work_time}\n",
   "tx_time_limit_tips": "Valid for: 10 minutes",

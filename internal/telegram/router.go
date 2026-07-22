@@ -21,7 +21,7 @@ type Router struct {
 func NewRouter(cfg *config.Config, db *gorm.DB, bot *tgbotapi.BotAPI, cache cache.Cache) *Router {
 	orderSvc := orderservice.NewService(cfg, db, bot, cache)
 	profileSvc := profileservice.NewService(cfg, db, bot, cache)
-	topupSvc := topupservice.NewService(db, bot, cache, orderSvc)
+	topupSvc := topupservice.NewService(cfg, db, bot, cache, orderSvc)
 	langResolver := newUserLanguageResolver(db, cache)
 
 	return &Router{

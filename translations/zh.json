@@ -31,7 +31,7 @@
   "promotion_link": "专属推广链接",
   "purchase_topup": "⚠️↓↓请按金额支付，否则无法到账↓↓\n---------------------------------\n🔸用户账号：@{username}\n🔸手机号码：<code>{mobile}</code> \n🔸支付金额：<code>{amount}</code> USDT\n🔸收款地址：<code>{address}</code>\n（点击地址复制）\n---------------------------------\n\n‼️请务必核对金额尾数，金额带小数\n",
   "receive_address": "收款地址：",
-  "successfully_purchased_order": "✅成功购买价值{amount}USDT的话费或流量，请耐心等待帮您充值，有任何问题，请联系客服 @PolyTopUp",
+  "successfully_purchased_order": "✅成功购买价值{amount}USDT的话费或流量，请耐心等待帮您充值，有任何问题，请联系客服 {support}",
   "support": "客服",
   "support_message": "📞{support}\n工作时间：{work_time}\n",
   "tx_time_limit_tips": "有效期：10 分钟",

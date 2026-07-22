@@ -155,10 +155,14 @@ func (s *Service) ShowHome(lang string, message *tgbotapi.Message) {
 // ShowSupport 展示客服联系方式。
 func (s *Service) ShowSupport(chatID int64) {
 	lang := s.resolveUserLang(chatID)
-	msg := tgbotapi.NewMessage(chatID, i18n.TParam(lang, "support_message", map[string]string{
-		"support":   "@PolyTopUp",
-		"work_time": "9:00-22:00",
-	}))
+	content := "📞" + s.supportUsername(lang) + "\n"
+	if workTime := s.supportWorkTime(); workTime != "" {
+		content = i18n.TParam(lang, "support_message", map[string]string{
+			"support":   s.supportUsername(lang),
+			"work_time": workTime,
+		})
+	}
+	msg := tgbotapi.NewMessage(chatID, content)
 	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -166,6 +170,20 @@ func (s *Service) ShowSupport(chatID int64) {
 		),
 	)
 	_, _ = s.bot.Send(msg)
+}
+
+func (s *Service) supportUsername(lang string) string {
+	if s.cfg != nil && strings.TrimSpace(s.cfg.SupportUsername) != "" {
+		return strings.TrimSpace(s.cfg.SupportUsername)
+	}
+	return i18n.T(lang, "support")
+}
+
+func (s *Service) supportWorkTime() string {
+	if s.cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.cfg.SupportWorkTime)
 }
 
 // ShowLanguageMenu 展示语言切换菜单。

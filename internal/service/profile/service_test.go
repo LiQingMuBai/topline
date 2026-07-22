@@ -91,6 +91,25 @@ func TestSwitchLanguageRefreshesStartKeyboard(t *testing.T) {
 	require.Contains(t, requests[1].Form.Get("reply_markup"), "Language")
 }
 
+func TestShowSupportUsesConfigValues(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	bot, recorder, cleanupBot := testsupport.NewTestBot(t)
+	defer cleanupBot()
+
+	service := NewService(&config.Config{
+		SupportUsername: "@CustomSupport",
+		SupportWorkTime: "10:00-20:00",
+	}, nil, bot, cache.NewMemoryCache())
+	service.ShowSupport(10004)
+
+	requests := recorder.Requests()
+	require.Len(t, requests, 1)
+	require.Equal(t, "sendMessage", requests[0].Method)
+	require.Contains(t, requests[0].Form.Get("text"), "@CustomSupport")
+	require.Contains(t, requests[0].Form.Get("text"), "10:00-20:00")
+}
+
 func newProfileCallbackQuery(chatID int64) *tgbotapi.CallbackQuery {
 	return &tgbotapi.CallbackQuery{
 		ID:   "profile-callback",

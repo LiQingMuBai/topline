@@ -17,16 +17,18 @@ const (
 
 // Config 统一管理应用运行期配置，避免业务代码直接散落读取环境变量。
 type Config struct {
-	MySQLDSN       string
-	BotToken       string
-	BotName        string
-	AgentName      string
-	NotifyChatID   int64
-	BotDebug       bool
-	TranslationDir string
-	DefaultLang    string
-	SupportedLangs []string
-	OrderImagePath string
+	MySQLDSN        string
+	BotToken        string
+	BotName         string
+	AgentName       string
+	SupportUsername string
+	SupportWorkTime string
+	NotifyChatID    int64
+	BotDebug        bool
+	TranslationDir  string
+	DefaultLang     string
+	SupportedLangs  []string
+	OrderImagePath  string
 }
 
 // Load 从 .env 读取所有配置。
@@ -36,15 +38,17 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		MySQLDSN:       strings.TrimSpace(os.Getenv("MYSQL_DSN")),
-		BotToken:       strings.TrimSpace(os.Getenv("TG_BOT_API")),
-		BotName:        strings.TrimSpace(os.Getenv("BOT_NAME")),
-		AgentName:      strings.TrimSpace(os.Getenv("AGENT")),
-		BotDebug:       getEnvBool("TG_DEBUG", false),
-		NotifyChatID:   getEnvInt64("TOPUP_NOTIFY_CHAT_ID", 0),
-		TranslationDir: getEnvOrDefault("TRANSLATIONS_DIR", defaultTranslationDir),
-		DefaultLang:    getEnvOrDefault("DEFAULT_LANG", defaultLang),
-		OrderImagePath: getEnvOrDefault("ORDER_IMAGE_PATH", "./static/CCTV.png"),
+		MySQLDSN:        strings.TrimSpace(os.Getenv("MYSQL_DSN")),
+		BotToken:        strings.TrimSpace(os.Getenv("TG_BOT_API")),
+		BotName:         strings.TrimSpace(os.Getenv("BOT_NAME")),
+		AgentName:       strings.TrimSpace(os.Getenv("AGENT")),
+		SupportUsername: strings.TrimSpace(os.Getenv("SUPPORT_USERNAME")),
+		SupportWorkTime: strings.TrimSpace(os.Getenv("SUPPORT_WORK_TIME")),
+		BotDebug:        getEnvBool("TG_DEBUG", false),
+		NotifyChatID:    getEnvInt64("TOPUP_NOTIFY_CHAT_ID", 0),
+		TranslationDir:  getEnvOrDefault("TRANSLATIONS_DIR", defaultTranslationDir),
+		DefaultLang:     getEnvOrDefault("DEFAULT_LANG", defaultLang),
+		OrderImagePath:  getEnvOrDefault("ORDER_IMAGE_PATH", "./static/CCTV.png"),
 	}
 	cfg.SupportedLangs = getEnvLangList("SUPPORTED_LANGS", cfg.DefaultLang)
 	if !slices.Contains(cfg.SupportedLangs, cfg.DefaultLang) {
