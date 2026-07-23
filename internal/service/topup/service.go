@@ -10,6 +10,8 @@ import (
 	"ushield_bot/internal/cache"
 	"ushield_bot/internal/config"
 	"ushield_bot/internal/global"
+	"ushield_bot/internal/i18n"
+	"ushield_bot/internal/infrastructure/repositories"
 	"ushield_bot/internal/poly/model"
 	polyrepo "ushield_bot/internal/poly/repo"
 	orderservice "ushield_bot/internal/service/order"
@@ -112,6 +114,7 @@ func (s *Service) HandleReminderDayInput(chatID int64, input, reminderID string)
 
 // ShowCountryMenu 展示国家选择菜单。
 func (s *Service) ShowCountryMenu(chatID int64, product string) {
+	lang := s.resolveUserLang(chatID)
 	countryItems, err := polyrepo.NewCountryRepo(s.db).List(context.Background())
 	if err != nil {
 		logrus.WithError(err).Warn("查询国家列表失败")
@@ -120,10 +123,10 @@ func (s *Service) ShowCountryMenu(chatID int64, product string) {
 
 	buttons := make([]tgbotapi.InlineKeyboardButton, 0, len(countryItems))
 	for _, countryItem := range countryItems {
-		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(countryItem.NameCn, countryCallbackPrefix(product)+strconv.FormatUint(uint64(countryItem.ID), 10)))
+		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(displayCountryName(lang, countryItem), countryCallbackPrefix(product)+strconv.FormatUint(uint64(countryItem.ID), 10)))
 	}
 
-	msg := tgbotapi.NewMessage(chatID, s.countryPrompt(product))
+	msg := tgbotapi.NewMessage(chatID, s.countryPrompt(chatID, product))
 	msg.ReplyMarkup = buildInlineKeyboard(buttons, 4)
 	msg.ParseMode = "HTML"
 	s.send(msg)
@@ -131,19 +134,20 @@ func (s *Service) ShowCountryMenu(chatID int64, product string) {
 
 // ShowPlanMenu 展示套餐选择菜单。
 func (s *Service) ShowPlanMenu(chatID int64, countryID, product string) {
-	planButtons, err := s.planButtons(product, countryID)
+	lang := s.resolveUserLang(chatID)
+	planButtons, err := s.planButtons(chatID, product, countryID)
 	if err != nil {
 		logrus.WithError(err).Warn("查询充值套餐失败")
 		return
 	}
 
 	extraButtons := []tgbotapi.InlineKeyboardButton{
-		tgbotapi.NewInlineKeyboardButtonData("🔢号码管理", "click_mobile_mgr"+countryID),
-		tgbotapi.NewInlineKeyboardButtonData("🔙️"+global.Translations["zh"]["back_homepage"], backCallback(product)),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, "topup_mobile_manager_button"), "click_mobile_mgr"+countryID),
+		tgbotapi.NewInlineKeyboardButtonData("🔙️"+i18n.T(lang, "back_homepage"), backCallback(product)),
 	}
 
 	keyboard := append(buildInlineKeyboardRows(planButtons, 2), tgbotapi.NewInlineKeyboardRow(extraButtons...))
-	msg := tgbotapi.NewMessage(chatID, s.planPrompt(product))
+	msg := tgbotapi.NewMessage(chatID, s.planPrompt(chatID, product))
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(keyboard...)
 	msg.ParseMode = "HTML"
 	s.send(msg)
@@ -159,7 +163,7 @@ func (s *Service) ShowPlanMobilePrompt(chatID int64, countryID, planID, product 
 	}
 
 	if len(items) == 0 {
-		msg := tgbotapi.NewMessage(chatID, mobileInputPrompt(product, country))
+		msg := tgbotapi.NewMessage(chatID, s.mobileInputPrompt(chatID, product, country))
 		msg.ParseMode = "HTML"
 		s.send(msg)
 		_ = s.cache.Set(s.stateKey(chatID), inputStatePrefix(product)+buildSelectionPayload(countryID, planID), time.Minute)
@@ -171,7 +175,7 @@ func (s *Service) ShowPlanMobilePrompt(chatID int64, countryID, planID, product 
 		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(item.Mobile, mobileSelectPrefix(product)+item.Mobile+"="+buildSelectionPayload(countryID, planID)))
 	}
 
-	msg := tgbotapi.NewMessage(chatID, mobileSavedPrompt(product, country))
+	msg := tgbotapi.NewMessage(chatID, s.mobileSavedPrompt(chatID, product, country))
 	msg.ReplyMarkup = buildInlineKeyboard(buttons, 1)
 	msg.ParseMode = "HTML"
 	s.send(msg)
@@ -270,6 +274,7 @@ func (s *Service) HandleDeleteMobileInput(chatID int64, input, countryID string)
 
 // ShowMobileManager 展示号码管理面板。
 func (s *Service) ShowMobileManager(chatID int64, countryID string, showDefaultReminder bool) {
+	lang := s.resolveUserLang(chatID)
 	country, _ := polyrepo.NewCountryRepo(s.db).Get(context.Background(), countryID)
 	mobileRepo := polyrepo.NewPolytoupUserMobileRepository(s.db)
 	items, err := mobileRepo.ListAll(context.Background(), countryID, strconv.FormatInt(chatID, 10))
@@ -281,8 +286,8 @@ func (s *Service) ShowMobileManager(chatID int64, countryID string, showDefaultR
 	msg.ParseMode = "HTML"
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("➕添加号码", ActionAddMobile+countryID),
-			tgbotapi.NewInlineKeyboardButtonData("➖删除号码", ActionDeleteMobile+countryID),
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, "topup_add_mobile_button"), ActionAddMobile+countryID),
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, "topup_delete_mobile_button"), ActionDeleteMobile+countryID),
 		),
 	)
 	s.send(msg)
@@ -298,7 +303,8 @@ func (s *Service) send(message tgbotapi.Chattable) {
 	}
 }
 
-func (s *Service) planButtons(product, countryID string) ([]tgbotapi.InlineKeyboardButton, error) {
+func (s *Service) planButtons(chatID int64, product, countryID string) ([]tgbotapi.InlineKeyboardButton, error) {
+	lang := s.resolveUserLang(chatID)
 	switch product {
 	case orderservice.ProductTopup:
 		items, err := polyrepo.NewExpensesTopUpPlanRepo(s.db).List(context.Background())
@@ -307,7 +313,7 @@ func (s *Service) planButtons(product, countryID string) ([]tgbotapi.InlineKeybo
 		}
 		buttons := make([]tgbotapi.InlineKeyboardButton, 0, len(items))
 		for _, item := range items {
-			buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(item.NameCn, planCallbackPrefix(product)+countryID+"="+strconv.FormatUint(uint64(item.ID), 10)))
+			buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(displayPlanName(lang, item.NameCn, item.NameEn), planCallbackPrefix(product)+countryID+"="+strconv.FormatUint(uint64(item.ID), 10)))
 		}
 		return buttons, nil
 	case orderservice.ProductData:
@@ -317,7 +323,7 @@ func (s *Service) planButtons(product, countryID string) ([]tgbotapi.InlineKeybo
 		}
 		buttons := make([]tgbotapi.InlineKeyboardButton, 0, len(items))
 		for _, item := range items {
-			buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(item.NameCn, planCallbackPrefix(product)+countryID+"="+strconv.FormatUint(uint64(item.ID), 10)))
+			buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(displayPlanName(lang, item.NameCn, item.NameEn), planCallbackPrefix(product)+countryID+"="+strconv.FormatUint(uint64(item.ID), 10)))
 		}
 		return buttons, nil
 	default:
@@ -448,22 +454,30 @@ func backCallback(product string) string {
 	return "back_home"
 }
 
-func (s *Service) countryPrompt(product string) string {
+func (s *Service) countryPrompt(chatID int64, product string) string {
+	lang := s.resolveUserLang(chatID)
 	workTimeLine := ""
 	if s != nil && s.cfg != nil {
 		if workTime := strings.TrimSpace(s.cfg.SupportWorkTime); workTime != "" {
-			workTimeLine = "\n工作时间：" + workTime
+			workTimeLine = "\n" + i18n.TParam(lang, "support_work_time_line", map[string]string{
+				"work_time": workTime,
+			})
 		}
 	}
 	if product == orderservice.ProductData {
-		return "请选择充值流量国家" + workTimeLine + "\n📌1、流量无法标准化，各个国家流量期限不一致。\n📌2、遇问题请第一时间联系客服。\n📌3、具体规则以客服解释执行为准。"
+		return i18n.TParam(lang, "topup_country_prompt_data", map[string]string{
+			"work_time_line": workTimeLine,
+		})
 	}
-	return "请选择充值话费国家" + workTimeLine
+	return i18n.TParam(lang, "topup_country_prompt_topup", map[string]string{
+		"work_time_line": workTimeLine,
+	})
 }
 
-func (s *Service) planPrompt(product string) string {
+func (s *Service) planPrompt(chatID int64, product string) string {
+	lang := s.resolveUserLang(chatID)
 	if product == orderservice.ProductData {
-		return "请选择5G流量套餐:"
+		return i18n.T(lang, "topup_plan_prompt_data")
 	}
 	feeRate := "5%-10%"
 	if s != nil && s.cfg != nil {
@@ -471,23 +485,77 @@ func (s *Service) planPrompt(product string) string {
 			feeRate = configuredFeeRate
 		}
 	}
-	return "请选择充值金额\n✅ 按实时汇率自动结算\n✅ 充值成功后，将收取 " + feeRate + " 服务佣金（仅在到账金额中扣除）"
+	return i18n.TParam(lang, "topup_plan_prompt_topup", map[string]string{
+		"fee_rate": feeRate,
+	})
 }
 
-func mobileSavedPrompt(product string, country model.Country) string {
+func (s *Service) mobileSavedPrompt(chatID int64, product string, country model.Country) string {
+	lang := s.resolveUserLang(chatID)
+	countryName := displayCountryName(lang, country)
 	if product == orderservice.ProductData {
-		return "请点击下方号码充值，或重新输入您要充值的<b>" + country.NameCn + "</b>" + country.NameEn + "，运营商 + 手机号码（示例：移动 +86138123456789）: "
+		return i18n.TParam(lang, "topup_mobile_saved_prompt_data", map[string]string{
+			"country": countryName,
+		})
 	}
-	return "请点击下方号码充值，或重新输入您要充值的<b>" + country.NameCn + "</b>运营商 + 手机号码（示例：移动 +86138123456789）: "
+	return i18n.TParam(lang, "topup_mobile_saved_prompt_topup", map[string]string{
+		"country": countryName,
+	})
 }
 
-func mobileInputPrompt(product string, country model.Country) string {
+func (s *Service) mobileInputPrompt(chatID int64, product string, country model.Country) string {
+	lang := s.resolveUserLang(chatID)
+	countryName := displayCountryName(lang, country)
 	if product == orderservice.ProductData {
-		return "请输入您要充值的<b>" + country.NameCn + "</b>" + country.NameEn + "，运营商 + 手机号码（示例：移动 +86138123456789）: "
+		return i18n.TParam(lang, "topup_mobile_input_prompt_data", map[string]string{
+			"country": countryName,
+		})
 	}
-	return "请输入您要充值的<b>" + country.NameCn + "</b>运营商 + 手机号码（示例：移动 +86138123456789）: "
+	return i18n.TParam(lang, "topup_mobile_input_prompt_topup", map[string]string{
+		"country": countryName,
+	})
+}
+
+func displayCountryName(lang string, country model.Country) string {
+	if strings.EqualFold(strings.TrimSpace(lang), "en") {
+		if name := strings.TrimSpace(country.NameEn); name != "" {
+			return name
+		}
+	}
+	return strings.TrimSpace(country.NameCn)
+}
+
+func displayPlanName(lang, nameCn, nameEn string) string {
+	if strings.EqualFold(strings.TrimSpace(lang), "en") {
+		if name := strings.TrimSpace(nameEn); name != "" {
+			return name
+		}
+	}
+	return strings.TrimSpace(nameCn)
 }
 
 func invalidMobilePrompt() string {
 	return "当前号码格式有误，请按“运营商 + 手机号码”或“运营商+手机号码”格式输入\n示例：移动 +86138123456789 或 移动+86138123456789\n"
+}
+
+func (s *Service) resolveUserLang(chatID int64) string {
+	if s != nil && s.cache != nil {
+		lang, err := s.cache.Get("LANG_" + strconv.FormatInt(chatID, 10))
+		if err == nil && lang != "" {
+			return lang
+		}
+	}
+
+	if s != nil && s.db != nil {
+		userRepo := repositories.NewUserRepository(s.db)
+		record, repoErr := userRepo.GetByChatID(chatID)
+		if repoErr == nil && record.Lang != "" {
+			return record.Lang
+		}
+	}
+
+	if global.DefaultLang != "" {
+		return global.DefaultLang
+	}
+	return "zh"
 }

@@ -127,10 +127,16 @@ func TestShowCountryMenuUsesConfiguredWorkTime(t *testing.T) {
 }
 
 func TestPlanPromptUsesConfiguredFeeRate(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	memCache := cache.NewMemoryCache()
+	require.NoError(t, memCache.Set("LANG_10005", "en", 0))
+
 	service := NewService(&config.Config{TopupFeeRate: "6%-9%"}, nil, nil, nil, nil)
 
-	text := service.planPrompt(orderservice.ProductTopup)
+	service.cache = memCache
+	text := service.planPrompt(10005, orderservice.ProductTopup)
 
 	require.Contains(t, text, "6%-9%")
-	require.NotContains(t, text, "5%-10%")
+	require.Contains(t, text, "service fee")
 }
