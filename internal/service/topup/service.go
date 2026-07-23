@@ -29,6 +29,23 @@ const (
 	ActionDeleteMobile     = "delete_mobile_mgr"
 )
 
+const (
+	continentAsia    = "continent_asia"
+	continentEurope  = "continent_europe"
+	continentAfrica  = "continent_africa"
+	continentAmerica = "continent_america"
+	continentOceania = "continent_oceania"
+	continentOther   = "continent_other"
+)
+
+var continentDisplayOrder = []string{
+	continentAsia,
+	continentEurope,
+	continentAfrica,
+	continentAmerica,
+	continentOceania,
+}
+
 // Handler 抽象话费/流量充值相关能力，便于替换实现和测试。
 type Handler interface {
 	PromptReminderDay(chatID int64, reminderID string)
@@ -121,13 +138,8 @@ func (s *Service) ShowCountryMenu(chatID int64, product string) {
 		return
 	}
 
-	buttons := make([]tgbotapi.InlineKeyboardButton, 0, len(countryItems))
-	for _, countryItem := range countryItems {
-		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(displayCountryName(lang, countryItem), countryCallbackPrefix(product)+strconv.FormatUint(uint64(countryItem.ID), 10)))
-	}
-
 	msg := tgbotapi.NewMessage(chatID, s.countryPrompt(chatID, product))
-	msg.ReplyMarkup = buildInlineKeyboard(buttons, 4)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(buildCountryKeyboardRows(lang, product, countryItems)...)
 	msg.ParseMode = "HTML"
 	s.send(msg)
 }
@@ -532,6 +544,98 @@ func displayPlanName(lang, nameCn, nameEn string) string {
 		}
 	}
 	return strings.TrimSpace(nameCn)
+}
+
+func buildCountryKeyboardRows(lang, product string, countryItems []model.Country) [][]tgbotapi.InlineKeyboardButton {
+	grouped := make(map[string][]model.Country, len(continentDisplayOrder)+1)
+	for _, countryItem := range countryItems {
+		continent := detectCountryContinent(countryItem)
+		grouped[continent] = append(grouped[continent], countryItem)
+	}
+
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(countryItems)+len(continentDisplayOrder))
+	for _, continent := range continentDisplayOrder {
+		rows = appendCountryContinentRows(rows, lang, product, continent, grouped[continent])
+	}
+	return appendCountryContinentRows(rows, lang, product, continentOther, grouped[continentOther])
+}
+
+func appendCountryContinentRows(rows [][]tgbotapi.InlineKeyboardButton, lang, product, continent string, countries []model.Country) [][]tgbotapi.InlineKeyboardButton {
+	if len(countries) == 0 {
+		return rows
+	}
+
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, continent), "noop"),
+	))
+
+	buttons := make([]tgbotapi.InlineKeyboardButton, 0, len(countries))
+	for _, countryItem := range countries {
+		buttons = append(buttons, tgbotapi.NewInlineKeyboardButtonData(
+			displayCountryName(lang, countryItem),
+			countryCallbackPrefix(product)+strconv.FormatUint(uint64(countryItem.ID), 10),
+		))
+	}
+	return append(rows, buildInlineKeyboardRows(buttons, 4)...)
+}
+
+func detectCountryContinent(country model.Country) string {
+	searchText := normalizeCountrySearchText(country)
+
+	switch {
+	case containsAny(searchText,
+		"china", "中国", "hong kong", "香港", "macau", "澳门", "taiwan", "台湾",
+		"japan", "日本", "korea", "韩国", "thailand", "泰国", "malaysia", "马来西亚",
+		"singapore", "新加坡", "indonesia", "印尼", "philippines", "菲律宾", "vietnam", "越南",
+		"india", "印度", "pakistan", "巴基斯坦", "bangladesh", "孟加拉", "nepal", "尼泊尔",
+		"cambodia", "柬埔寨", "laos", "老挝", "myanmar", "缅甸", "sri lanka", "斯里兰卡",
+		"uae", "阿联酋", "dubai", "saudi", "沙特", "qatar", "卡塔尔", "kuwait", "科威特",
+		"bahrain", "巴林", "oman", "阿曼", "israel", "以色列", "turkey", "土耳其",
+		"kazakhstan", "哈萨克", "uzbekistan", "乌兹别克", "mongolia", "蒙古"):
+		return continentAsia
+	case containsAny(searchText,
+		"united kingdom", "britain", "england", "英国", "france", "法国", "germany", "德国",
+		"italy", "意大利", "spain", "西班牙", "portugal", "葡萄牙", "netherlands", "荷兰",
+		"belgium", "比利时", "switzerland", "瑞士", "austria", "奥地利", "sweden", "瑞典",
+		"norway", "挪威", "denmark", "丹麦", "finland", "芬兰", "poland", "波兰",
+		"czech", "捷克", "hungary", "匈牙利", "greece", "希腊", "ireland", "爱尔兰",
+		"romania", "罗马尼亚", "ukraine", "乌克兰", "russia", "俄罗斯"):
+		return continentEurope
+	case containsAny(searchText,
+		"south africa", "南非", "egypt", "埃及", "nigeria", "尼日利亚", "kenya", "肯尼亚",
+		"ghana", "加纳", "morocco", "摩洛哥", "ethiopia", "埃塞俄比亚", "tanzania", "坦桑尼亚",
+		"uganda", "乌干达", "algeria", "阿尔及利亚", "tunisia", "突尼斯"):
+		return continentAfrica
+	case containsAny(searchText,
+		"united states", "usa", "america", "美国", "canada", "加拿大", "mexico", "墨西哥",
+		"brazil", "巴西", "argentina", "阿根廷", "chile", "智利", "colombia", "哥伦比亚",
+		"peru", "秘鲁", "ecuador", "厄瓜多尔", "uruguay", "乌拉圭", "paraguay", "巴拉圭",
+		"bolivia", "玻利维亚", "venezuela", "委内瑞拉", "costa rica", "哥斯达黎加",
+		"panama", "巴拿马", "guatemala", "危地马拉", "dominican", "多米尼加",
+		"puerto rico", "波多黎各", "cuba", "古巴", "jamaica", "牙买加"):
+		return continentAmerica
+	case containsAny(searchText,
+		"australia", "澳大利亚", "new zealand", "新西兰", "fiji", "斐济",
+		"papua new guinea", "巴布亚新几内亚", "samoa", "萨摩亚"):
+		return continentOceania
+	default:
+		return continentOther
+	}
+}
+
+func normalizeCountrySearchText(country model.Country) string {
+	return strings.ToLower(strings.TrimSpace(
+		country.NameCn + " " + country.NameEn + " " + country.EventName,
+	))
+}
+
+func containsAny(text string, keywords ...string) bool {
+	for _, keyword := range keywords {
+		if keyword != "" && strings.Contains(text, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+	return false
 }
 
 func invalidMobilePrompt() string {

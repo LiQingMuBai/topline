@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"ushield_bot/internal/cache"
 	"ushield_bot/internal/config"
+	"ushield_bot/internal/poly/model"
 	orderservice "ushield_bot/internal/service/order"
 	"ushield_bot/internal/testsupport"
 )
@@ -139,4 +140,30 @@ func TestPlanPromptUsesConfiguredFeeRate(t *testing.T) {
 
 	require.Contains(t, text, "6%-9%")
 	require.Contains(t, text, "service fee")
+}
+
+func TestBuildCountryKeyboardRowsGroupsByContinent(t *testing.T) {
+	testsupport.SeedTranslations()
+
+	rows := buildCountryKeyboardRows("en", orderservice.ProductTopup, []model.Country{
+		{BaseModel: model.BaseModel{ID: 1}, NameCn: "中国", NameEn: "China"},
+		{BaseModel: model.BaseModel{ID: 2}, NameCn: "德国", NameEn: "Germany"},
+		{BaseModel: model.BaseModel{ID: 3}, NameCn: "肯尼亚", NameEn: "Kenya"},
+		{BaseModel: model.BaseModel{ID: 4}, NameCn: "加拿大", NameEn: "Canada"},
+		{BaseModel: model.BaseModel{ID: 5}, NameCn: "澳大利亚", NameEn: "Australia"},
+	})
+
+	require.Len(t, rows, 10)
+	require.Equal(t, "🌏 Asia", rows[0][0].Text)
+	require.Equal(t, "China", rows[1][0].Text)
+	require.Equal(t, "🌍 Europe", rows[2][0].Text)
+	require.Equal(t, "Germany", rows[3][0].Text)
+	require.Equal(t, "🌍 Africa", rows[4][0].Text)
+	require.Equal(t, "Kenya", rows[5][0].Text)
+	require.Equal(t, "🌎 Americas", rows[6][0].Text)
+	require.Equal(t, "Canada", rows[7][0].Text)
+	require.Equal(t, "🌏 Oceania", rows[8][0].Text)
+	require.Equal(t, "Australia", rows[9][0].Text)
+	require.NotNil(t, rows[1][0].CallbackData)
+	require.Equal(t, "click_country_1", *rows[1][0].CallbackData)
 }
