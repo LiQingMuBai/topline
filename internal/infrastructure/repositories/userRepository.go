@@ -110,6 +110,25 @@ func (r *UserRepository) GetByChatID(chatID int64) (domain.User, error) {
 	return user, err
 }
 
+func (r *UserRepository) ListRegisteredUsers(ctx context.Context, botName string) ([]domain.User, error) {
+	users := make([]domain.User, 0)
+
+	query := r.db.WithContext(ctx).
+		Model(&domain.User{}).
+		Where("associates IS NOT NULL").
+		Where("associates <> ''").
+		Order("created_at ASC")
+
+	if botName != "" {
+		query = query.Where("bot_name = ?", botName)
+	}
+
+	if err := query.Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (r *UserRepository) GetByAssociates(associates string) (domain.User, error) {
 	user := domain.User{}
 	err := r.db.Where(" associates=?", associates).First(&user).Error
