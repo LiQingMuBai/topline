@@ -591,7 +591,8 @@ func detectCountryContinent(country model.Country) string {
 		"cambodia", "柬埔寨", "laos", "老挝", "myanmar", "缅甸", "sri lanka", "斯里兰卡",
 		"uae", "阿联酋", "dubai", "saudi", "沙特", "qatar", "卡塔尔", "kuwait", "科威特",
 		"bahrain", "巴林", "oman", "阿曼", "israel", "以色列", "turkey", "土耳其",
-		"kazakhstan", "哈萨克", "uzbekistan", "乌兹别克", "mongolia", "蒙古"):
+		"iran", "伊朗", "tajikistan", "塔吉克斯坦", "kazakhstan", "哈萨克",
+		"uzbekistan", "乌兹别克", "mongolia", "蒙古"):
 		return continentAsia
 	case containsAny(searchText,
 		"united kingdom", "britain", "england", "英国", "france", "法国", "germany", "德国",
