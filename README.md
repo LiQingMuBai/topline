@@ -119,6 +119,28 @@ The current test suite includes focused unit tests for:
 - top-up mobile state flow
 - profile deposit record pagination
 
+## Broadcast Registered Users
+
+Send a one-time release / promotion message to all registered users (deduplicated by `chat_id` parsed from `users.associates`).
+
+Preview recipients only (default):
+
+```bash
+go run ./cmd/broadcast_registered_users -dry-run=true -limit=10
+```
+
+Actually send messages:
+
+```bash
+go run ./cmd/broadcast_registered_users -dry-run=false -limit=0 -sleep-ms=1000
+```
+
+Flags:
+
+- `-dry-run`: preview only, does not send messages (default: `true`)
+- `-limit`: max number of users to send (0 = unlimited)
+- `-sleep-ms`: delay in milliseconds between sends
+
 ## Notes
 
 - The repository currently ships with Chinese translation data and defaults to `zh`.
